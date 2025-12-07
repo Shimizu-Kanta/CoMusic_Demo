@@ -54,7 +54,7 @@ export const LetterDetailPage = () => {
         .from('song_letters')
         .select('*')
         .eq('id', id)
-        .single();
+        .single<Letter>();
 
       if (letterError || !letterData) {
         console.error(letterError);
@@ -70,7 +70,7 @@ export const LetterDetailPage = () => {
         .from('songs')
         .select('*')
         .eq('id', letterData.song_id)
-        .single();
+        .single<Song>();
 
       if (songError) {
         console.error(songError);
@@ -99,7 +99,14 @@ export const LetterDetailPage = () => {
 
   const handleReplySubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!user || !id || !replyText.trim()) return;
+    if (!user || !id || !replyText.trim() || !letter) return;
+
+    const isReceiver = letter.receiver_id === user.id;
+
+    if (!isReceiver) {
+      setError('このレターに返信できるのは、受信したユーザーだけです。');
+      return;
+    }
 
     setSendingReply(true);
     setError(null);
@@ -113,7 +120,7 @@ export const LetterDetailPage = () => {
           content: replyText.trim(),
         })
         .select('id, content, created_at')
-        .single();
+        .single<Reply>();
 
       if (insertError || !data) {
         console.error(insertError);
@@ -123,12 +130,14 @@ export const LetterDetailPage = () => {
       setReplies((prev) => [...prev, data]);
       setReplyText('');
 
-      // 初回返信なら、ステータスを replied に更新しておいても良い
-      if (letter && letter.status !== 'replied') {
+      // 初回返信なら、ステータスを replied に更新
+      if (letter.status !== 'replied') {
         await supabase
           .from('song_letters')
           .update({ status: 'replied' })
           .eq('id', letter.id);
+
+        setLetter({ ...letter, status: 'replied' });
       }
     } catch (e: any) {
       setError(e.message ?? 'エラーが発生しました。');
@@ -137,12 +146,36 @@ export const LetterDetailPage = () => {
     }
   };
 
+  if (!user) {
+    return (
+      <p className="text-sm text-slate-400">
+        ログインしてからこのページを表示してください。
+      </p>
+    );
+  }
+
   if (loading) {
     return <p className="text-sm text-slate-400">読み込み中…</p>;
   }
 
   if (error || !letter) {
-    return <p className="text-sm text-red-400">{error ?? 'エラーが発生しました。'}</p>;
+    return (
+      <p className="text-sm text-red-400">
+        {error ?? 'ソングレターの読み込み中にエラーが発生しました。'}
+      </p>
+    );
+  }
+
+  const isSender = letter.sender_id === user.id;
+  const isReceiver = letter.receiver_id === user.id;
+
+  // 送り主でも受信者でもない場合は見せない
+  if (!isSender && !isReceiver) {
+    return (
+      <p className="text-sm text-red-400">
+        このソングレターを閲覧する権限がありません。
+      </p>
+    );
   }
 
   const createdAt = new Date(letter.created_at).toLocaleString('ja-JP');
@@ -155,18 +188,22 @@ export const LetterDetailPage = () => {
         : `https://youtu.be/${song.provider_track_id}`
       : null);
 
+  const heading = isReceiver
+    ? 'あなた宛に届いたソングレター'
+    : 'あなたが送ったソングレター';
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h1 className="text-xl font-semibold mb-1">ソングレター</h1>
-        <p className="text-xs text-slate-400">{createdAt} に届いたレター</p>
+        <h1 className="text-xl font-semibold mb-1">{heading}</h1>
+        <p className="text-xs text-slate-400">{createdAt} のレター</p>
       </div>
 
       <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium">{letter.sender_name}</p>
           <span className="text-xs text-slate-400">
-            {letter.is_anonymous ? '匿名レター' : 'アカウントからのレター'}
+            {letter.is_anonymous ? '匿名レター' : 'アカウント由来のレター'}
           </span>
         </div>
 
@@ -214,26 +251,37 @@ export const LetterDetailPage = () => {
           </div>
         )}
 
-        <form onSubmit={handleReplySubmit} className="space-y-2">
-          <textarea
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm min-h-[80px]"
-            placeholder="このレターへの感想やお礼を書いてみましょう。（任意）"
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-          />
-          {error && (
-            <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
-              {error}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={sendingReply || !replyText.trim()}
-            className="rounded-md bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
-          >
-            {sendingReply ? '送信中…' : '感想を送る'}
-          </button>
-        </form>
+        {/* 返信フォーム：受信者だけ表示 */}
+        {isReceiver && (
+          <form onSubmit={handleReplySubmit} className="space-y-2">
+            <textarea
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm min-h-[80px]"
+              placeholder="このレターへの感想やお礼を書いてみましょう。（任意）"
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+            />
+            {error && (
+              <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
+                {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={sendingReply || !replyText.trim()}
+              className="rounded-md bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            >
+              {sendingReply ? '送信中…' : '感想を送る'}
+            </button>
+          </form>
+        )}
+
+        {/* 送り主のときの説明 */}
+        {isSender && (
+          <p className="text-xs text-slate-500">
+            これはあなたが送ったソングレターです。ここで相手からの感想を読むことができます。
+            （送り主からの追いメッセージ機能は今後拡張しても良さそうです）
+          </p>
+        )}
       </div>
     </div>
   );
