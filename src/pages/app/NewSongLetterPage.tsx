@@ -786,14 +786,14 @@ export const NewSongLetterPage = () => {
                       type="button"
                       key={track.id}
                       onClick={() => setSelectedTrack(track)}
-                      className="flex-shrink-0 w-44 rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-left hover:border-sky-500/70"
+                      className="flex-shrink-0 w-44 rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 flex flex-col items-center text-center hover:border-sky-500/70"
                     >
                       {track.imageUrl && (
-                        <div className="w-10 h-10 shrink-0">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 mb-2">
                           <img
                             src={track.imageUrl}
                             alt={track.name}
-                            className="w-full h-full rounded-md object-cover"
+                            className="max-w-[80px] max-h-[80px] w-auto h-auto rounded-md object-cover"
                           />
                         </div>
                       )}
@@ -896,19 +896,20 @@ export const NewSongLetterPage = () => {
             )}
 
             {ytMeta && (
-              <div className="rounded-md border border-sky-500/60 bg-sky-500/5 p-3 flex gap-3 items-center">
+              <div className="rounded-md border border-sky-500/60 bg-sky-500/5 p-3 flex flex-col items-center text-center gap-2">
+                <p className="text-xs text-slate-400">取得した動画情報</p>
+                
                 {ytMeta.imageUrl && (
-                  <img
-                    src={ytMeta.imageUrl}
-                    alt={ytMeta.title}
-                    className="w-full h-auto rounded-md object-cover"
-                  />
+                  <div className="w-full max-w-xs mx-auto aspect-video mb-2">
+                    <img
+                      src={ytMeta.imageUrl}
+                      alt={ytMeta.title}
+                      className="w-full h-full rounded-md object-cover"
+                    />
+                  </div>
                 )}
-                <div className="flex-1">
-                  <p className="text-xs text-slate-400 mb-0.5">取得した動画情報</p>
-                  <p className="text-sm font-medium">{ytMeta.title}</p>
-                  <p className="text-xs text-slate-400">{ytMeta.channelTitle}</p>
-                </div>
+                <p className="text-sm font-medium line-clamp-2">{ytMeta.title}</p>
+                <p className="text-xs text-slate-400 line-clamp-1">{ytMeta.channelTitle}</p>
               </div>
             )}
           </div>
