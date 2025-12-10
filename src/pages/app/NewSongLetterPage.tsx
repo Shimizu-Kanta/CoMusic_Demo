@@ -774,60 +774,76 @@ export const NewSongLetterPage = () => {
               </p>
             )}
 
-            {spotifyResults.length > 0 && (
+            {spotifyResults.length > 0 && !selectedTrack && (
               <div className="space-y-2">
-                <p className="text-xs text-slate-400">
-                  検索結果から1曲選択してください。
+                <p className="text-sm font-medium">
+                  検索結果
                 </p>
-                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                
+                <div className="flex gap-2 overflow-x-auto pb-2 pr-1">
                   {spotifyResults.map((track) => (
                     <button
                       type="button"
                       key={track.id}
                       onClick={() => setSelectedTrack(track)}
-                      className={`w-full text-left rounded-md border px-3 py-2 text-sm flex gap-3 ${
-                        selectedTrack?.id === track.id
-                          ? 'border-sky-500 bg-sky-500/10'
-                          : 'border-slate-700 bg-slate-950 hover:border-slate-500'
-                      }`}
+                      className="flex-shrink-0 w-44 rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-left hover:border-sky-500/70"
                     >
                       {track.imageUrl && (
-                        <img
-                          src={track.imageUrl}
-                          alt={track.name}
-                          className="w-full h-auto rounded-md object-cover"
-                        />
+                        <div className="w-10 h-10 shrink-0">
+                          <img
+                            src={track.imageUrl}
+                            alt={track.name}
+                            className="w-full h-full rounded-md object-cover"
+                          />
+                        </div>
                       )}
-                      <div className="flex-1">
-                        <p className="font-medium">{track.name}</p>
-                        <p className="text-xs text-slate-400">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{ track.name }</p>
+                        <p className="text-xs text-slate-400 truncate">
                           {track.artists.map((a) => a.name).join(', ')}
                         </p>
                       </div>
                     </button>
                   ))}
                 </div>
+
+                <p className="text-[11px] text-slate-500">
+                  左右にスクロールして曲を選んでください。
+                </p>
               </div>
             )}
 
             {selectedTrack && (
-              <div className="rounded-md border border-sky-500/60 bg-sky-500/5 p-3 flex gap-3 items-center">
-                {selectedTrack.imageUrl && (
-                  <img
-                    src={selectedTrack.imageUrl}
-                    alt={selectedTrack.name}
-                    className="w-full h-auto rounded-md object-cover"
-                  />
-                )}
-                <div className="flex-1">
-                  <p className="text-xs text-slate-400 mb-0.5">選択中の曲</p>
-                  <p className="text-sm font-medium">{selectedTrack.name}</p>
-                  <p className="text-xs text-slate-400">
-                    {selectedTrack.artists.map((a) => a.name).join(', ')}
-                  </p>
-                </div>
+              <div className="rounded-md border border-sky-500/60 bg-sky-500/5 p-3 items-center justify-between gap-3">
+                <p className="text-sm text-slate-400 mb-0.5">選択中の曲</p>
+
+                  {selectedTrack.imageUrl && (
+                    <div className="w-24 h-24 sm:w-28 sm:h-28"> 
+                      <img
+                        src={selectedTrack.imageUrl}
+                        alt={selectedTrack.name}
+                        className="w-full h-full rounded-md object-cover"
+                      />
+                    </div>
+                  )}
+
+                <p className="text-sm font-medium line-clamp-2">
+                  {selectedTrack.name}
+                </p>
+                <p className="text-xs text-slate-400 line-clamp-1">
+                  {selectedTrack.artists.map((a) => a.name).join(', ')}
+                </p>
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={() => setSelectedTrack(null)}
+              className="rounded-md border border-red-500 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10"
+            >
+              選択をクリアする
+            </button>
+
           </div>
         )}
 
