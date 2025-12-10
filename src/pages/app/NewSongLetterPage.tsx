@@ -48,6 +48,12 @@ export const NewSongLetterPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 制限設定用
+  const [maxDailyLetters, setMaxDailyLetters] = useState<number>(5);
+  const [maxInboxLetters, setMaxInboxLetters] = useState<number>(10);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+
   if (!user) {
     // PrivateRoute でガードしているはずだけど念のため
     return null;
@@ -80,6 +86,35 @@ export const NewSongLetterPage = () => {
 
     fetchProfile();
   }, [user]);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('key, value_int');
+
+      if (error) {
+        console.warn('app_settings 読み込みエラー:', error);
+        setSettingsLoaded(true);
+        return;
+      }
+
+      if (data) {
+        for (const row of data) {
+          if (row.key === 'max_daily_letters' && row.value_int != null) {
+            setMaxDailyLetters(row.value_int);
+          }
+          if (row.key === 'max_inbox_letters' && row.value_int != null) {
+            setMaxInboxLetters(row.value_int);
+          }
+        }
+      }
+
+      setSettingsLoaded(true);
+    };
+
+    fetchSettings();
+  }, []);
 
   // YouTube用の簡易ID抽出
   const extractYouTubeId = (input: string): string => {
@@ -143,6 +178,75 @@ export const NewSongLetterPage = () => {
     }
   };
 
+  const assignRandomReceiver = async (letterId: string, maxInbox: number): Promise<boolean> => {
+    if (!user) return false;
+
+    // 1. 自分以外の全ユーザーを候補として取得
+    const { data: candidates, error: candidatesError } = await supabase
+      .from('profiles')
+      .select('id')
+      .neq('id', user.id);
+
+    if (candidatesError) {
+      console.warn('候補ユーザー取得エラー:', candidatesError);
+      return false;
+    }
+
+    if (!candidates || candidates.length === 0) {
+      // まだ他のユーザーがいない
+      console.log('配達候補がいないため、queued のままにします。');
+      return false;
+    }
+
+    // 2. 候補をランダムシャッフル
+    const ids = candidates.map((c) => c.id as string);
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+
+    // 3. 1人ずつ「受信レターが10件未満か」をチェックし、OKな人がいたら配達
+    for (const receiverId of ids) {
+      // その人の未アーカイブ受信レター数（delivered, replied）を数える
+      const { count, error: countError } = await supabase
+        .from('song_letters')
+        .select('id', { count: 'exact', head: true })
+        .eq('receiver_id', receiverId)
+        .in('status', ['delivered', 'replied']);
+
+      if (countError) {
+        console.warn('受信レター数カウントエラー:', countError);
+        continue;
+      }
+
+      if ((count ?? 0) >= maxInbox) {
+        continue;
+      }
+
+      // ここまで来たら、この人に配達してOK
+      const { error: updateError } = await supabase
+        .from('song_letters')
+        .update({
+          receiver_id: receiverId,
+          status: 'delivered',
+          delivered_at: new Date().toISOString(),
+        })
+        .eq('id', letterId);
+
+      if (updateError) {
+        console.warn('ソングレター配達エラー:', updateError);
+        continue;
+      }
+
+      console.log('ソングレターを配達しました。receiver_id =', receiverId);
+      return true;
+    }
+
+    // 受け取れる人が誰もいなかった
+    console.log('受け取れるユーザーがいないため、queued のままにします。');
+    return false;
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -164,6 +268,47 @@ export const NewSongLetterPage = () => {
     setLoading(true);
 
     try {
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tommorow = new Date(today);
+      tommorow.setDate(tommorow.getDate() + 1);
+
+      const { count: sentCount, error: sentcountError } = await supabase
+        .from('song_letters')
+        .select('id', { count: 'exact', head: true })
+        .eq('sender_id', user.id)
+        .gte('created_at', today.toISOString())
+        .lt('created_at', tommorow.toISOString());
+
+      if (sentcountError) {
+        console.error(sentcountError);
+        throw new Error('送信回数の確認に失敗しました。');
+      }
+
+      if ((sentCount ?? 0) >= maxDailyLetters) {
+        throw new Error(
+          `本日の送信上限数(${maxDailyLetters}通)に達しました。また明日送りましょう！`
+        );
+      }
+
+      const { count: inboxCount, error: inboxError } = await supabase
+        .from('song_letters')
+        .select('id', { count: 'exact', head: true })
+        .eq('receiver_id', user.id)
+        .in('status', ['delivered', 'replied']);
+
+      if (inboxError) {
+        console.error(inboxError);
+        throw new Error('受信ボックスの確認に失敗しました。');
+      }
+
+      if ((inboxCount ?? 0) >= maxInboxLetters) {
+        throw new Error(
+          `受信ボックスの上限数(${maxInboxLetters}通)に達しているため、送信できません。`
+        );
+      }
+
       let songId: string | null = null;
 
       if (provider === 'spotify') {
@@ -334,7 +479,7 @@ export const NewSongLetterPage = () => {
       }
 
       // 3. song_letters に INSERT（マッチングは後で）
-      const { error: insertLetterError } = await supabase
+      const { data: insertedLetter ,error: insertLetterError } = await supabase
         .from('song_letters')
         .insert({
           sender_id: user.id,
@@ -344,12 +489,17 @@ export const NewSongLetterPage = () => {
           is_anonymous: isAnonymous,
           message,
           status: 'queued',
-        });
+        })
+        .select('id')
+        .single();
 
-      if (insertLetterError) {
+      if (insertLetterError || !insertedLetter) {
         console.error(insertLetterError);
         throw new Error('ソングレターの送信に失敗しました。');
       }
+
+      // 4. ランダム受信者割り当てを試みる
+      await assignRandomReceiver(insertedLetter.id, maxInboxLetters);
 
       navigate('/app', { replace: true });
     } catch (err: any) {
