@@ -896,19 +896,20 @@ export const NewSongLetterPage = () => {
             )}
 
             {ytMeta && (
-              <div className="rounded-md border border-sky-500/60 bg-sky-500/5 p-3 flex gap-3 items-center">
+              <div className="rounded-md border border-sky-500/60 bg-sky-500/5 p-3 flex flex-col items-center text-center gap-2">
+                <p className="text-xs text-slate-400">取得した動画情報</p>
+                
                 {ytMeta.imageUrl && (
-                  <img
-                    src={ytMeta.imageUrl}
-                    alt={ytMeta.title}
-                    className="w-full h-auto rounded-md object-cover"
-                  />
+                  <div className="w-full max-w-xs mx-auto aspect-video mb-2">
+                    <img
+                      src={ytMeta.imageUrl}
+                      alt={ytMeta.title}
+                      className="w-full h-full rounded-md object-cover"
+                    />
+                  </div>
                 )}
-                <div className="flex-1">
-                  <p className="text-xs text-slate-400 mb-0.5">取得した動画情報</p>
-                  <p className="text-sm font-medium">{ytMeta.title}</p>
-                  <p className="text-xs text-slate-400">{ytMeta.channelTitle}</p>
-                </div>
+                <p className="text-sm font-medium line-clamp-2">{ytMeta.title}</p>
+                <p className="text-xs text-slate-400 line-clamp-1">{ytMeta.channelTitle}</p>
               </div>
             )}
           </div>
