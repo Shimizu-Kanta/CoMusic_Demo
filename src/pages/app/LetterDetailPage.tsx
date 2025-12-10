@@ -269,11 +269,13 @@ export const LetterDetailPage = () => {
         {song && (
           <div className="rounded-md border border-slate-700 bg-slate-950/60 p-3 text-sm flex gap-3">
             {song.thumbnail_url && (
-              <img
-                src={song.thumbnail_url}
-                alt={song.title}
-                className="h-12 w-12 rounded-md object-cover"
-              />
+              <div className="w-full max-w-xs mx-auto aspect-video">
+                <img
+                  src={song.thumbnail_url}
+                  alt={song.title}
+                  className="w-1/2 h-auto rounded-md object-cover"
+                />
+              </div>
             )}
             <div className="flex-1 space-y-1">
               <p className="text-xs text-slate-400">曲</p>
