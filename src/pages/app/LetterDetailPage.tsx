@@ -1,6 +1,6 @@
 // src/pages/app/LetterDetailPage.tsx
 import { FormEvent, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -12,8 +12,11 @@ type Letter = {
   sender_name: string;
   is_anonymous: boolean;
   message: string;
-  status: string;
+  status: 'queued' | 'delivered' | 'replied' | 'archived';
   created_at: string;
+  delivered_at: string | null;
+  read_at: string | null;
+  archived_at: string | null;
 };
 
 type Song = {
@@ -22,6 +25,7 @@ type Song = {
   provider_track_id: string;
   title: string;
   url: string | null;
+  thumbnail_url?: string | null;
 };
 
 type Reply = {
@@ -32,6 +36,7 @@ type Reply = {
 
 export const LetterDetailPage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
 
   const [letter, setLetter] = useState<Letter | null>(null);
@@ -92,10 +97,31 @@ export const LetterDetailPage = () => {
       }
 
       setLoading(false);
+
+      // 4. 受信者が初めて開いた場合は既読にする
+      if (
+        user &&
+        letterData.receiver_id === user.id &&
+        !letterData.read_at
+      ) {
+        const now = new Date().toISOString();
+        const { error: readError } = await supabase
+          .from('song_letters')
+          .update({ read_at: now })
+          .eq('id', letterData.id);
+
+        if (readError) {
+          console.warn('read_at 更新エラー:', readError);
+        } else {
+          setLetter((prev) =>
+            prev ? { ...prev, read_at: now, status: prev.status } : prev
+          );
+        }
+      }
     };
 
     fetchData();
-  }, [id]);
+  }, [id, user]);
 
   const handleReplySubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -130,7 +156,6 @@ export const LetterDetailPage = () => {
       setReplies((prev) => [...prev, data]);
       setReplyText('');
 
-      // 初回返信なら、ステータスを replied に更新
       if (letter.status !== 'replied') {
         await supabase
           .from('song_letters')
@@ -144,6 +169,23 @@ export const LetterDetailPage = () => {
     } finally {
       setSendingReply(false);
     }
+  };
+
+  const handleArchive = async () => {
+    if (!letter) return;
+
+    const { error } = await supabase
+      .from('song_letters')
+      .update({ archived_at: new Date().toISOString() })
+      .eq('id', letter.id);
+
+    if (error) {
+      console.error(error);
+      alert('アーカイブに失敗しました。時間をおいて再度お試しください。');
+      return;
+    }
+
+    navigate('/letters/inbox', { replace: true });
   };
 
   if (!user) {
@@ -169,7 +211,6 @@ export const LetterDetailPage = () => {
   const isSender = letter.sender_id === user.id;
   const isReceiver = letter.receiver_id === user.id;
 
-  // 送り主でも受信者でもない場合は見せない
   if (!isSender && !isReceiver) {
     return (
       <p className="text-sm text-red-400">
@@ -178,7 +219,8 @@ export const LetterDetailPage = () => {
     );
   }
 
-  const createdAt = new Date(letter.created_at).toLocaleString('ja-JP');
+  const baseTime = letter.delivered_at ?? letter.created_at;
+  const createdAt = new Date(baseTime).toLocaleString('ja-JP');
 
   const songLink =
     song?.url ??
@@ -194,9 +236,26 @@ export const LetterDetailPage = () => {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-xl font-semibold mb-1">{heading}</h1>
-        <p className="text-xs text-slate-400">{createdAt} のレター</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold mb-1">{heading}</h1>
+          <p className="text-xs text-slate-400">{createdAt} のレター</p>
+          {letter.read_at && isReceiver && (
+            <p className="text-[11px] text-slate-500 mt-1">
+              既読: {new Date(letter.read_at).toLocaleString('ja-JP')}
+            </p>
+          )}
+        </div>
+
+        {isReceiver && !letter.archived_at && (
+          <button
+            type="button"
+            onClick={handleArchive}
+            className="rounded-md border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800"
+          >
+            アーカイブ
+          </button>
+        )}
       </div>
 
       <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
@@ -208,19 +267,30 @@ export const LetterDetailPage = () => {
         </div>
 
         {song && (
-          <div className="rounded-md border border-slate-700 bg-slate-950/60 p-3 text-sm space-y-1">
-            <p className="text-xs text-slate-400">曲</p>
-            <p className="font-medium">{song.title}</p>
-            {songLink && (
-              <a
-                href={songLink}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-sky-400 hover:underline"
-              >
-                {song.provider === 'spotify' ? 'Spotifyで開く' : 'YouTubeで開く'}
-              </a>
+          <div className="rounded-md border border-slate-700 bg-slate-950/60 p-3 text-sm flex gap-3">
+            {song.thumbnail_url && (
+              <img
+                src={song.thumbnail_url}
+                alt={song.title}
+                className="h-12 w-12 rounded-md object-cover"
+              />
             )}
+            <div className="flex-1 space-y-1">
+              <p className="text-xs text-slate-400">曲</p>
+              <p className="font-medium">{song.title}</p>
+              {songLink && (
+                <a
+                  href={songLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-sky-400 hover:underline"
+                >
+                  {song.provider === 'spotify'
+                    ? 'Spotifyで開く'
+                    : 'YouTubeで開く'}
+                </a>
+              )}
+            </div>
           </div>
         )}
 
@@ -251,7 +321,7 @@ export const LetterDetailPage = () => {
           </div>
         )}
 
-        {/* 返信フォーム：受信者だけ表示 */}
+        {/* 返信フォーム：受信者だけ */}
         {isReceiver && (
           <form onSubmit={handleReplySubmit} className="space-y-2">
             <textarea
@@ -275,11 +345,10 @@ export const LetterDetailPage = () => {
           </form>
         )}
 
-        {/* 送り主のときの説明 */}
+        {/* 送り主向け説明 */}
         {isSender && (
           <p className="text-xs text-slate-500">
             これはあなたが送ったソングレターです。ここで相手からの感想を読むことができます。
-            （送り主からの追いメッセージ機能は今後拡張しても良さそうです）
           </p>
         )}
       </div>
