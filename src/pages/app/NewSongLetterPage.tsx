@@ -19,6 +19,15 @@ type SpotifyTrack = {
   durationMs: number;
 };
 
+type YouTubeVideoMeta = {
+  id: string;
+  title: string;
+  channelTitle: string;
+  url: string;
+  imageUrl: string | null;
+  durationSec: number | null;
+};
+
 export const NewSongLetterPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -43,6 +52,11 @@ export const NewSongLetterPage = () => {
   // YouTube 用（暫定：手入力）
   const [ytInput, setYtInput] = useState('');
   const [ytTitle, setYtTitle] = useState('');
+
+  // YouTube 用
+  const [ytMeta, setYtMeta] = useState<YouTubeVideoMeta | null>(null);
+  const [ytMetaLoading, setYtMetaLoading] = useState(false);
+  const [ytMetaError, setYtMetaError] = useState<string | null>(null);
 
   // 送信まわり
   const [loading, setLoading] = useState(false);
@@ -217,6 +231,50 @@ export const NewSongLetterPage = () => {
       setSpotifyLoading(false);
     }
   };
+
+  // YouTube メタデータ取得
+  const handleFetchYouTubeMeta = async () => {
+    setYtMetaError(null);
+    setError(null);
+    setYtMeta(null);
+
+    const input = ytInput.trim();
+    if (!input) {
+      setYtMetaError('YouTube の URL またはIDを入力してください。');
+      return;
+    }
+
+    setYtMetaLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke<{
+        video: YouTubeVideoMeta;
+      }>('youtube-fetch-video', {
+        body: { urlOrId: input },
+      });
+
+      if (error) {
+        console.error(error);
+        setYtMetaError(
+          'YouTube の情報取得に失敗しました。もう一度お試しください。'
+        );
+      } else if (!data || !data.video) {
+        setYtMetaError('動画情報が取得できませんでした。');
+      } else {
+        setYtMeta(data.video);
+
+        if (!ytTitle) {
+          setYtTitle(data.video.title ?? '');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setYtMetaError('YouTube の情報取得中にエラーが発生しました。');
+    } finally {
+      setYtMetaLoading(false);
+    }
+  };
+
 
   const assignRandomReceiver = async (
     letterId: string,
@@ -477,24 +535,26 @@ export const NewSongLetterPage = () => {
           }
         }
       } else {
-        // YouTube（手入力版）
+        // YouTube
         if (!ytInput.trim()) {
           setLoading(false);
           setError('YouTube の URL またはIDを入力してください。');
           return;
         }
-        if (!ytTitle.trim()) {
-          setLoading(false);
-          setError('曲のタイトルを入力してください。');
-          return;
-        }
 
-        const videoId = extractYouTubeId(ytInput);
+        const videoId = ytMeta?.id ?? extractYouTubeId(ytInput);
         if (!videoId) {
           setLoading(false);
           setError('YouTube の URL / ID の形式を確認してください。');
           return;
         }
+
+        const titleToUse =
+          ytTitle.trim() || ytMeta?.title || 'YouTube video';
+
+        const urlToUse = ytMeta?.url ?? ytInput.trim();
+        const thumbnailToUse = ytMeta?.imageUrl || null;
+        const durationMs = ytMeta?.durationSec != null ? ytMeta.durationSec * 1000 : null;
 
         const { data: existingSongs, error: selectSongError } = await supabase
           .from('songs')
@@ -502,7 +562,7 @@ export const NewSongLetterPage = () => {
           .eq('provider', 'youtube')
           .eq('provider_track_id', videoId)
           .limit(1);
-
+        
         if (selectSongError) {
           console.error(selectSongError);
           throw new Error('楽曲情報の取得に失敗しました。');
@@ -516,8 +576,10 @@ export const NewSongLetterPage = () => {
             .insert({
               provider: 'youtube',
               provider_track_id: videoId,
-              title: ytTitle,
-              url: ytInput,
+              title: titleToUse,
+              url: urlToUse,
+              thumbnail_url: thumbnailToUse,
+              duration_ms: durationMs,
             })
             .select('id')
             .single();
@@ -773,23 +835,66 @@ export const NewSongLetterPage = () => {
         {provider === 'youtube' && (
           <div className="space-y-3">
             <div className="space-y-2">
-              <label className="block text-sm">YouTube のURLまたは動画ID</label>
-              <input
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                placeholder="https://youtu.be/… / 動画ID"
-                value={ytInput}
-                onChange={(e) => setYtInput(e.target.value)}
-              />
+              <label className="block text-sm">YouTube の URL または動画ID</label>
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  placeholder="例：https://www.youtube.com/watch?v=XXXXXXXXXXX"
+                  value={ytInput}
+                  onChange={(e) => {
+                    setYtInput(e.target.value);
+                    setYtMeta(null);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleFetchYouTubeMeta}
+                  disabled={ytMetaLoading}
+                  className="rounded-md bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+                >
+                  {ytMetaLoading ? '取得中…' : '情報取得'}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                URL または 動画IDからタイトルやサムネイルを自動取得します。
+              </p>
             </div>
-            <div className="space-y-2">
-              <label className="block text-sm">曲のタイトル</label>
+
+            <div>
+              <label className="block text-sm">動画 タイトル</label>
               <input
                 className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                placeholder="例: 夜に駆ける"
+                placeholder="曲のタイトルを入力"
                 value={ytTitle}
                 onChange={(e) => setYtTitle(e.target.value)}
               />
+              <p className="text-[11px] text-slate-500 mt-1">
+                動画タイトルを手動で編集できます。
+              </p>
             </div>
+
+            {ytMetaError && (
+              <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
+                {ytMetaError}
+              </p>
+            )}
+
+            {ytMeta && (
+              <div className="rounded-md border border-sky-500/60 bg-sky-500/5 p-3 flex gap-3 items-center">
+                {ytMeta.imageUrl && (
+                  <img
+                    src={ytMeta.imageUrl}
+                    alt={ytMeta.title}
+                    className="h-12 w-12 rounded-md object-cover"
+                  />
+                )}
+                <div className="flex-1">
+                  <p className="text-xs text-slate-400 mb-0.5">取得した動画情報</p>
+                  <p className="text-sm font-medium">{ytMeta.title}</p>
+                  <p className="text-xs text-slate-400">{ytMeta.channelTitle}</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
