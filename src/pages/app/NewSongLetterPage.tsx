@@ -212,7 +212,9 @@ export const NewSongLetterPage = () => {
         .from('song_letters')
         .select('id', { count: 'exact', head: true })
         .eq('receiver_id', receiverId)
-        .in('status', ['delivered', 'replied']);
+        .in('status', ['delivered', 'replied'])
+        .is('archived_at', null)
+        .is('read_at', null);
 
       if (countError) {
         console.warn('受信レター数カウントエラー:', countError);
@@ -296,7 +298,9 @@ export const NewSongLetterPage = () => {
         .from('song_letters')
         .select('id', { count: 'exact', head: true })
         .eq('receiver_id', user.id)
-        .in('status', ['delivered', 'replied']);
+        .in('status', ['delivered', 'replied'])
+        .is('archived_at', null)
+        .is('read_at', null);
 
       if (inboxError) {
         console.error(inboxError);
