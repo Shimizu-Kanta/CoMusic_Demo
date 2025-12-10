@@ -795,7 +795,7 @@ export const NewSongLetterPage = () => {
                         <img
                           src={track.imageUrl}
                           alt={track.name}
-                          className="h-10 w-10 rounded-md object-cover"
+                          className="w-full h-auto rounded-md object-cover"
                         />
                       )}
                       <div className="flex-1">
@@ -816,7 +816,7 @@ export const NewSongLetterPage = () => {
                   <img
                     src={selectedTrack.imageUrl}
                     alt={selectedTrack.name}
-                    className="h-12 w-12 rounded-md object-cover"
+                    className="w-full h-auto rounded-md object-cover"
                   />
                 )}
                 <div className="flex-1">
@@ -885,7 +885,7 @@ export const NewSongLetterPage = () => {
                   <img
                     src={ytMeta.imageUrl}
                     alt={ytMeta.title}
-                    className="h-12 w-12 rounded-md object-cover"
+                    className="w-full h-auto rounded-md object-cover"
                   />
                 )}
                 <div className="flex-1">
