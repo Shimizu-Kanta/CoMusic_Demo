@@ -786,14 +786,14 @@ export const NewSongLetterPage = () => {
                       type="button"
                       key={track.id}
                       onClick={() => setSelectedTrack(track)}
-                      className="flex-shrink-0 w-44 rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-left hover:border-sky-500/70"
+                      className="flex-shrink-0 w-44 rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 flex flex-col items-center text-center hover:border-sky-500/70"
                     >
                       {track.imageUrl && (
-                        <div className="w-10 h-10 shrink-0">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 mb-2">
                           <img
                             src={track.imageUrl}
                             alt={track.name}
-                            className="w-full h-full rounded-md object-cover"
+                            className="max-w-[80px] max-h-[80px] w-auto h-auto rounded-md object-cover"
                           />
                         </div>
                       )}
