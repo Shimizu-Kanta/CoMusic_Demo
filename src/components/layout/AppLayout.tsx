@@ -31,6 +31,9 @@ export const AppLayout = ({ children }: Props) => {
             <Link to="/letters/inbox" className="hover:text-sky-400">
               受信ボックス
             </Link>
+            <Link to="/letters/sent" className="hover:text-sky-400">
+              送信したレター
+            </Link>
             <Link to="/settings/profile" className="hover:text-sky-400">
               プロフィール
             </Link>

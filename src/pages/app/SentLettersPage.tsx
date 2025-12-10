@@ -1,31 +1,33 @@
-// src/pages/app/InboxPage.tsx
+// src/pages/app/SentLettersPage.tsx
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
 
-type Letter = {
+type SentLetter = {
   id: string;
+  receiver_id: string | null;
   sender_name: string;
   message: string;
   status: string;
   created_at: string;
 };
 
-export const InboxPage = () => {
+export const SentLettersPage = () => {
   const { user } = useAuth();
-  const [letters, setLetters] = useState<Letter[]>([]);
+  const [letters, setLetters] = useState<SentLetter[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
 
-    const fetchInbox = async () => {
+    const fetchSent = async () => {
       setLoading(true);
+
       const { data, error } = await supabase
         .from('song_letters')
-        .select('id, sender_name, message, status, created_at')
-        .eq('receiver_id', user.id)
+        .select('id, receiver_id, sender_name, message, status, created_at')
+        .eq('sender_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -38,7 +40,7 @@ export const InboxPage = () => {
       setLoading(false);
     };
 
-    fetchInbox();
+    fetchSent();
   }, [user]);
 
   if (!user) return null;
@@ -46,9 +48,9 @@ export const InboxPage = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold mb-1">受信ボックス</h1>
+        <h1 className="text-xl font-semibold mb-1">送信したソングレター</h1>
         <p className="text-sm text-slate-400">
-          あなたに届いたソングレターの一覧です。
+          あなたがこれまでに送ったソングレターの一覧です。返信がついたレターには「返信あり」と表示されます。（今後さらに拡張予定）
         </p>
       </div>
 
@@ -56,7 +58,7 @@ export const InboxPage = () => {
         <p className="text-sm text-slate-400">読み込み中…</p>
       ) : letters.length === 0 ? (
         <p className="text-sm text-slate-400">
-          まだソングレターは届いていません。
+          まだソングレターを送っていません。
         </p>
       ) : (
         <div className="space-y-3">
@@ -67,22 +69,30 @@ export const InboxPage = () => {
               className="block rounded-xl border border-slate-800 bg-slate-900/60 p-4 hover:border-sky-500/60 transition-colors"
             >
               <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium">
-                  {letter.sender_name}{' '}
-                  <span className="text-xs text-slate-500">
-                    ({new Date(letter.created_at).toLocaleString('ja-JP')})
-                  </span>
-                </p>
+                <div>
+                  <p className="text-sm font-medium">
+                    宛先:{' '}
+                    <span className="text-slate-300">
+                      {letter.receiver_id ? '誰かの受信ボックス' : 'まだ誰にも届いていません'}
+                    </span>
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {new Date(letter.created_at).toLocaleString('ja-JP')}
+                  </p>
+                </div>
                 <span className="text-xs text-slate-400">
                   {letter.status === 'queued'
                     ? '配達待ち'
                     : letter.status === 'delivered'
-                    ? '受信中'
+                    ? '配達済み'
                     : letter.status === 'replied'
-                    ? '返信済み'
+                    ? '返信あり'
                     : 'アーカイブ'}
                 </span>
               </div>
+              <p className="text-xs text-slate-500 mb-1">
+                送り主として表示される名前: {letter.sender_name}
+              </p>
               <p className="text-sm text-slate-200 line-clamp-2">
                 {letter.message}
               </p>

@@ -9,6 +9,7 @@ import { InboxPage } from './pages/app/InboxPage';
 import { LetterDetailPage } from './pages/app/LetterDetailPage';
 import { ProfileSettingsPage } from './pages/app/ProfileSettingsPage';
 import { AppLayout } from './components/layout/AppLayout';
+import { SentLettersPage } from './pages/app/SentLettersPage';
 
 function App() {
   return (
@@ -52,6 +53,17 @@ function App() {
         }
       />
 
+      <Route
+        path="/letters/sent"
+        element={
+          <PrivateRoute>
+            <AppLayout>
+              <SentLettersPage />
+            </AppLayout>
+          </PrivateRoute>
+        }
+      />  
+      
       <Route
         path="/letters/:id"
         element={
