@@ -53,6 +53,10 @@ export const NewSongLetterPage = () => {
   const [maxInboxLetters, setMaxInboxLetters] = useState<number>(10);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
+  // 今日の送信状況
+  const [sentToday, setSentToday] = useState(0);
+  const [limitCheckLoading, setLimitCheckLoading] = useState(true);
+  const [limitExceeded, setLimitExceeded] = useState(false);
 
   if (!user) {
     // PrivateRoute でガードしているはずだけど念のため
@@ -87,6 +91,7 @@ export const NewSongLetterPage = () => {
     fetchProfile();
   }, [user]);
 
+  // app_settings から各種上限値取得
   useEffect(() => {
     const fetchSettings = async () => {
       const { data, error } = await supabase
@@ -115,6 +120,41 @@ export const NewSongLetterPage = () => {
 
     fetchSettings();
   }, []);
+
+  // 今日の送信通数をカウントして、上限に達しているかチェック
+  useEffect(() => {
+    if (!user) return;
+
+    const checkDailyLimit = async () => {
+      setLimitCheckLoading(true);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+
+      const { count, error } = await supabase
+        .from('song_letters')
+        .select('id', { count: 'exact', head: true })
+        .eq('sender_id', user.id)
+        .gte('created_at', today.toISOString())
+        .lt('created_at', tomorrow.toISOString());
+
+      if (error) {
+        console.error('今日送った通数の取得に失敗しました:', error);
+        setSentToday(0);
+        setLimitExceeded(false);
+      } else {
+        const c = count ?? 0;
+        setSentToday(c);
+        setLimitExceeded(c >= maxDailyLetters);
+      }
+
+      setLimitCheckLoading(false);
+    };
+
+    checkDailyLimit();
+  }, [user, maxDailyLetters]);
 
   // YouTube用の簡易ID抽出
   const extractYouTubeId = (input: string): string => {
@@ -178,7 +218,10 @@ export const NewSongLetterPage = () => {
     }
   };
 
-  const assignRandomReceiver = async (letterId: string, maxInbox: number): Promise<boolean> => {
+  const assignRandomReceiver = async (
+    letterId: string,
+    maxInbox: number
+  ): Promise<boolean> => {
     if (!user) return false;
 
     // 1. 自分以外の全ユーザーを候補として取得
@@ -205,16 +248,15 @@ export const NewSongLetterPage = () => {
       [ids[i], ids[j]] = [ids[j], ids[i]];
     }
 
-    // 3. 1人ずつ「受信レターが10件未満か」をチェックし、OKな人がいたら配達
+    // 3. 1人ずつ「受信レターが未読上限未満か」をチェックし、OKな人がいたら配達
     for (const receiverId of ids) {
-      // その人の未アーカイブ受信レター数（delivered, replied）を数える
       const { count, error: countError } = await supabase
         .from('song_letters')
         .select('id', { count: 'exact', head: true })
         .eq('receiver_id', receiverId)
         .in('status', ['delivered', 'replied'])
         .is('archived_at', null)
-        .is('read_at', null);
+        .is('read_at', null); // 未読のみ
 
       if (countError) {
         console.warn('受信レター数カウントエラー:', countError);
@@ -225,7 +267,6 @@ export const NewSongLetterPage = () => {
         continue;
       }
 
-      // ここまで来たら、この人に配達してOK
       const { error: updateError } = await supabase
         .from('song_letters')
         .update({
@@ -244,7 +285,6 @@ export const NewSongLetterPage = () => {
       return true;
     }
 
-    // 受け取れる人が誰もいなかった
     console.log('受け取れるユーザーがいないため、queued のままにします。');
     return false;
   };
@@ -252,6 +292,19 @@ export const NewSongLetterPage = () => {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    // まずクライアント側の上限チェック（ページ入場時に計算した値）
+    if (limitCheckLoading) {
+      setError('送信回数を確認しています。少し待ってから再度お試しください。');
+      return;
+    }
+
+    if (limitExceeded) {
+      setError(
+        `本日の送信上限数(${maxDailyLetters}通)に達しました。また明日送りましょう！`
+      );
+      return;
+    }
 
     const displayName = isAnonymous ? '匿名' : profileName;
 
@@ -270,7 +323,7 @@ export const NewSongLetterPage = () => {
     setLoading(true);
 
     try {
-      
+      // サーバ側でもう一度送信回数・受信枠を確認（ダブルガード）
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const tommorow = new Date(today);
@@ -300,7 +353,7 @@ export const NewSongLetterPage = () => {
         .eq('receiver_id', user.id)
         .in('status', ['delivered', 'replied'])
         .is('archived_at', null)
-        .is('read_at', null);
+        .is('read_at', null); // 未読のみ
 
       if (inboxError) {
         console.error(inboxError);
@@ -482,8 +535,8 @@ export const NewSongLetterPage = () => {
         throw new Error('楽曲情報の保存に失敗しました。');
       }
 
-      // 3. song_letters に INSERT（マッチングは後で）
-      const { data: insertedLetter ,error: insertLetterError } = await supabase
+      // 3. song_letters に INSERT（最初は queued）
+      const { data: insertedLetter, error: insertLetterError } = await supabase
         .from('song_letters')
         .insert({
           sender_id: user.id,
@@ -523,6 +576,20 @@ export const NewSongLetterPage = () => {
           今は Spotify 検索から曲を選ぶか、YouTube のURL/IDを直接入力できます。
         </p>
       </div>
+
+      {/* 上限チェックの結果表示 */}
+      {limitCheckLoading ? (
+        <p className="text-xs text-slate-500">
+          今日送れるソングレターの残り回数を確認しています…
+        </p>
+      ) : limitExceeded ? (
+        <div className="rounded-md border border-red-900 bg-red-950/60 px-3 py-2 text-xs text-red-200">
+          今日送れるソングレターの上限（{maxDailyLetters}通）に達しました。
+          明日また送ってみてください。
+          <br />
+          本日はすでに {sentToday} 通送信しています。
+        </div>
+      ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-5 max-w-xl">
         {/* 送り主の表示名 */}
@@ -745,7 +812,13 @@ export const NewSongLetterPage = () => {
 
         <button
           type="submit"
-          disabled={loading || profileLoading || (!profileName && !isAnonymous)}
+          disabled={
+            loading ||
+            profileLoading ||
+            (!profileName && !isAnonymous) ||
+            limitExceeded ||
+            limitCheckLoading
+          }
           className="rounded-md bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
         >
           {loading ? '送信中…' : 'ソングレターを投函する'}
