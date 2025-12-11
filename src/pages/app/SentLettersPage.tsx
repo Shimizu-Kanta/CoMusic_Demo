@@ -143,9 +143,9 @@ export const SentLettersPage = () => {
                     <p className="font-medium text-sm line-clamp-1">
                       {letter.song?.title || '楽曲情報なし'}
                     </p>
-                    {song?.artist_name && (
+                    {Array.isArray(letter.song?.songs_artists) && letter.song.songs_artists.length > 0 && (
                       <p className="text-xs text-gray-500 line-clamp-1">
-                        {song.artist_name}
+                        {letter.song.songs_artists.map((sa: any) => sa.artist?.name).filter(Boolean).join(', ')}
                       </p>
                     )}
                   </div>
@@ -157,9 +157,6 @@ export const SentLettersPage = () => {
                         month: 'short',
                         day: 'numeric',
                       })}
-                    </span>
-                    <span className="truncate max-w-[120px]">
-                      to {letter.receiver_id ? '送信済み' : '未配達'}
                     </span>
                   </div>
 

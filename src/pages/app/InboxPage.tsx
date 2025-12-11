@@ -146,9 +146,9 @@ export const InboxPage = () => {
                     <p className="font-medium text-sm line-clamp-1">
                       {letter.song?.title || '楽曲情報なし'}
                     </p>
-                    {song?.artist_name && (
+                    {Array.isArray(letter.song?.songs_artists) && letter.song.songs_artists.length > 0 && (
                       <p className="text-xs text-gray-500 line-clamp-1">
-                        {song.artist_name}
+                        {letter.song.songs_artists.map((sa: any) => sa.artist?.name).filter(Boolean).join(', ')}
                       </p>
                     )}
                   </div>
