@@ -1,8 +1,8 @@
-// src/pages/app/SentLettersPage.tsx
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
+import { Music, Clock, Check, Reply, Send as SendIcon } from 'lucide-react';
 
 type SentLetter = {
   id: string;
@@ -11,11 +11,21 @@ type SentLetter = {
   message: string;
   status: string;
   created_at: string;
+  delivered_at: string | null;
+  song_id: string;
+};
+
+type Song = {
+  id: string;
+  title: string;
+  artist_name?: string;
+  thumbnail_url?: string | null;
 };
 
 export const SentLettersPage = () => {
   const { user } = useAuth();
   const [letters, setLetters] = useState<SentLetter[]>([]);
+  const [songs, setSongs] = useState<Record<string, Song>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,20 +34,24 @@ export const SentLettersPage = () => {
     const fetchSent = async () => {
       setLoading(true);
 
-      const { data, error } = await supabase
+      const { data: lettersData, error: lettersError } = await supabase
         .from('song_letters')
-        .select('id, receiver_id, sender_name, message, status, created_at')
+        .select(`
+        id, sender_name, message, status, created_at, song_id,
+        song:song_id (id, title, thumbnail_url, songs_artists (artist:artist_id (name)))
+        `)
         .eq('sender_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error(error);
+      if (lettersError || !lettersData) {
+        console.error(lettersError);
         setLetters([]);
-      } else {
-        setLetters(data ?? []);
+        setLoading(false);
+        return;
       }
-
+      setLetters(lettersData);
       setLoading(false);
+
     };
 
     fetchSent();
@@ -45,59 +59,114 @@ export const SentLettersPage = () => {
 
   if (!user) return null;
 
+  const getStatusBadge = (letter: SentLetter) => {
+    if (letter.status === 'queued') {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+          <Clock className="w-3 h-3" />
+          配達待ち
+        </span>
+      );
+    }
+    if (letter.status === 'replied') {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+          <Reply className="w-3 h-3" />
+          返信あり
+        </span>
+      );
+    }
+    if (letter.status === 'delivered') {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs shadow-sm" style={{ backgroundColor: '#8fcccc', color: 'white' }}>
+          <Check className="w-3 h-3" />
+          配達済み
+        </span>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold mb-1">送信したソングレター</h1>
-        <p className="text-sm text-slate-400">
-          あなたがこれまでに送ったソングレターの一覧です。返信がついたレターには「返信あり」と表示されます。（今後さらに拡張予定）
+        <h1 className="mb-1">送信したソングレター</h1>
+        <p className="text-sm text-gray-600">
+          あなたがこれまでに送ったソングレターの一覧です。
         </p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-400">読み込み中…</p>
+        <p className="text-sm text-gray-400">読み込み中…</p>
       ) : letters.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          まだソングレターを送っていません。
-        </p>
+        <div className="text-center py-12">
+          <SendIcon className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+          <p className="text-sm text-gray-500">
+            まだソングレターを送っていません。
+          </p>
+        </div>
       ) : (
-        <div className="space-y-3">
-          {letters.map((letter) => (
-            <Link
-              key={letter.id}
-              to={`/letters/${letter.id}`}
-              className="block rounded-xl border border-slate-800 bg-slate-900/60 p-4 hover:border-sky-500/60 transition-colors"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="text-sm font-medium">
-                    宛先:{' '}
-                    <span className="text-slate-300">
-                      {letter.receiver_id ? '誰かの受信ボックス' : 'まだ誰にも届いていません'}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {letters.map((letter) => {
+            const createdDate = new Date(letter.created_at);
+            const song = songs[letter.song_id];
+
+            return (
+              <Link
+                key={letter.id}
+                to={`/letters/${letter.id}`}
+                className="group relative rounded-xl border border-gray-200 bg-white overflow-hidden hover:border-[#8fcccc] transition-all hover:shadow-lg"
+              >
+                {/* Album Art */}
+                <div className="aspect-square bg-gray-100 relative overflow-hidden">
+                  {letter.song?.thumbnail_url ? (
+                    <img
+                      src={letter.song.thumbnail_url}
+                      alt={letter.song.title || 'Album art'}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Music className="w-16 h-16 text-gray-300" />
+                    </div>
+                  )}
+                  
+                  {/* Status Badge */}
+                  <div className="absolute top-3 right-3">
+                    {getStatusBadge(letter)}
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="p-4 space-y-2">
+                  <div>
+                    <p className="font-medium text-sm line-clamp-1">
+                      {letter.song?.title || '楽曲情報なし'}
+                    </p>
+                    {Array.isArray(letter.song?.songs_artists) && letter.song.songs_artists.length > 0 && (
+                      <p className="text-xs text-gray-500 line-clamp-1">
+                        {letter.song.songs_artists.map((sa: any) => sa.artist?.name).filter(Boolean).join(', ')}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {createdDate.toLocaleDateString('ja-JP', {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
                     </span>
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {new Date(letter.created_at).toLocaleString('ja-JP')}
+                  </div>
+
+                  <p className="text-xs text-gray-600 line-clamp-2">
+                    {letter.message}
                   </p>
                 </div>
-                <span className="text-xs text-slate-400">
-                  {letter.status === 'queued'
-                    ? '配達待ち'
-                    : letter.status === 'delivered'
-                    ? '配達済み'
-                    : letter.status === 'replied'
-                    ? '返信あり'
-                    : 'アーカイブ'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mb-1">
-                送り主として表示される名前: {letter.sender_name}
-              </p>
-              <p className="text-sm text-slate-200 line-clamp-2">
-                {letter.message}
-              </p>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

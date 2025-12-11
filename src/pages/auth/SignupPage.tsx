@@ -1,120 +1,145 @@
-// src/pages/auth/SignupPage.tsx
 import { FormEvent, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
+import { Music, Mail, Lock, User } from 'lucide-react';
 
 export const SignupPage = () => {
   const navigate = useNavigate();
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
-  const [userId, setUserId] = useState('');
-
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setError(null);
     setLoading(true);
+    setError(null);
 
-    // 1. Auth ユーザー作成
-    const {
-      data: { user },
-      error: signUpError,
-    } = await supabase.auth.signUp({
+    // 1. ユーザー登録
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
     });
 
-    if (signUpError || !user) {
+    if (signUpError) {
+      setError(signUpError.message);
       setLoading(false);
-      setError(signUpError?.message ?? 'サインアップに失敗しました');
       return;
     }
 
-    // 2. profiles 作成
-    const { error: profileError } = await supabase.from('profiles').insert({
-      id: user.id,
-      username,
-      user_id: userId,
-    });
+    // 2. プロフィール作成
+    if (data.user) {
+      const { error: profileError } = await supabase.from('profiles').insert({
+        id: data.user.id,
+        username: username || email.split('@')[0],
+        user_id: data.user.id,
+      });
 
-    setLoading(false);
-
-    if (profileError) {
-      setError(profileError.message);
-      return;
+      if (profileError) {
+        console.error('プロフィール作成エラー:', profileError);
+      }
     }
 
-    navigate('/app', { replace: true });
+    navigate('/app');
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-lg">
-        <h1 className="text-xl font-semibold mb-4 text-center">新規登録</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm mb-1">ユーザ名（表示名）</label>
-            <input
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-8">
+        {/* Logo */}
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Music className="w-10 h-10" style={{ color: '#8fcccc' }} />
+            <h1 className="text-3xl">CoMusic</h1>
           </div>
-          <div>
-            <label className="block text-sm mb-1">ユーザID (@xxx)</label>
-            <input
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">メールアドレス</label>
-            <input
-              type="email"
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">パスワード</label>
-            <input
-              type="password"
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
+          <p className="text-sm text-gray-600">音楽で繋がる、想いを届ける</p>
+        </div>
 
-          {error && (
-            <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
-              {error}
+        {/* Signup Form */}
+        <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+          <h2 className="mb-6 text-center">新規登録</h2>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="username" className="block text-sm mb-2 text-gray-700">
+                ユーザー名
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 bg-white pl-10 pr-4 py-2.5 text-sm focus:border-[#8fcccc] focus:outline-none transition-colors"
+                  placeholder="あなたの名前"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="email" className="block text-sm mb-2 text-gray-700">
+                メールアドレス
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full rounded-lg border border-gray-300 bg-white pl-10 pr-4 py-2.5 text-sm focus:border-[#8fcccc] focus:outline-none transition-colors"
+                  placeholder="your@email.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm mb-2 text-gray-700">
+                パスワード
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  className="w-full rounded-lg border border-gray-300 bg-white pl-10 pr-4 py-2.5 text-sm focus:border-[#8fcccc] focus:outline-none transition-colors"
+                  placeholder="6文字以上"
+                />
+              </div>
+            </div>
+
+            {error && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-lg py-2.5 text-sm transition-all disabled:opacity-50 text-white"
+              style={{ backgroundColor: '#8fcccc' }}
+            >
+              {loading ? '登録中...' : '新規登録'}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-xs text-gray-600">
+              すでにアカウントをお持ちの方は{' '}
+              <Link to="/login" className="hover:underline" style={{ color: '#8fcccc' }}>
+                ログイン
+              </Link>
             </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-sky-500 py-2 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
-          >
-            {loading ? '登録中...' : '登録する'}
-          </button>
-        </form>
-        <p className="mt-4 text-xs text-center text-slate-400">
-          すでにアカウントをお持ちですか？{' '}
-          <Link to="/login" className="text-sky-400 hover:underline">
-            ログイン
-          </Link>
-        </p>
+          </div>
+        </div>
       </div>
     </div>
   );

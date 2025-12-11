@@ -1,179 +1,174 @@
-// src/pages/app/InboxPage.tsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
+import { Music, Clock, Check, Reply, Mail, Send as SendIcon } from 'lucide-react';
 
-type Letter = {
+type SentLetter = {
   id: string;
+  receiver_id: string | null;
   sender_name: string;
   message: string;
-  status: 'queued' | 'delivered' | 'replied' | 'archived';
+  status: string;
   created_at: string;
   delivered_at: string | null;
+  song_id: string;
+  is_anonymous: boolean;
   read_at: string | null;
+};
+
+type Song = {
+  id: string;
+  title: string;
+  artist_name?: string;
+  thumbnail_url?: string | null;
 };
 
 export const InboxPage = () => {
   const { user } = useAuth();
-  const [letters, setLetters] = useState<Letter[]>([]);
+  const [letters, setLetters] = useState<SentLetter[]>([]);
+  const [songs, setSongs] = useState<Record<string, Song>>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // 受信枠上限（app_settings から取得）
-  const [maxInboxLetters, setMaxInboxLetters] = useState<number>(10);
 
   useEffect(() => {
     if (!user) return;
 
-    const fetchInbox = async () => {
+    const fetchSent = async () => {
       setLoading(true);
-      setError(null);
 
-      // 1. app_settings から max_inbox_letters を取得
-      const { data: settings, error: settingsError } = await supabase
-        .from('app_settings')
-        .select('key, value_int');
-
-      if (settingsError) {
-        console.warn('app_settings 読み込みエラー:', settingsError);
-      } else if (settings) {
-        const inboxSetting = settings.find(
-          (s) => s.key === 'max_inbox_letters' && s.value_int != null
-        );
-        if (inboxSetting) {
-          setMaxInboxLetters(inboxSetting.value_int as number);
-        }
-      }
-
-      // 2. 自分宛て & アーカイブされていないレターを取得
-      const { data, error: inboxError } = await supabase
+      const { data: lettersData, error: lettersError } = await supabase
         .from('song_letters')
-        .select(
-          'id, sender_name, message, status, created_at, delivered_at, read_at, archived_at'
-        )
+        .select(`
+        id, sender_name, message, status, created_at, song_id, is_anonymous, read_at,
+        song:song_id (id, title, thumbnail_url, songs_artists (artist:artist_id (name)))
+        `)
         .eq('receiver_id', user.id)
-        .is('archived_at', null)
-        .order('delivered_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false });
 
-      if (inboxError) {
-        console.error(inboxError);
-        setError('受信ボックスの読み込みに失敗しました。');
+      if (lettersError || !lettersData) {
+        console.error(lettersError);
         setLetters([]);
-      } else {
-        const mapped: Letter[] =
-          (data as any[])?.map((row) => ({
-            id: row.id as string,
-            sender_name: row.sender_name as string,
-            message: row.message as string,
-            status: row.status as Letter['status'],
-            created_at: row.created_at as string,
-            delivered_at: row.delivered_at ?? null,
-            read_at: row.read_at ?? null,
-          })) ?? [];
-        setLetters(mapped);
+        setLoading(false);
+        return;
       }
-
+      setLetters(lettersData);
       setLoading(false);
+
     };
 
-    fetchInbox();
+    fetchSent();
   }, [user]);
 
   if (!user) return null;
 
-  const handleArchive = async (
-    e: React.MouseEvent<HTMLButtonElement>,
-    letterId: string
-  ) => {
-    // Link への遷移を止める
-    e.preventDefault();
-    e.stopPropagation();
-
-    const { error } = await supabase
-      .from('song_letters')
-      .update({ archived_at: new Date().toISOString() })
-      .eq('id', letterId);
-
-    if (error) {
-      console.error(error);
-      alert('アーカイブに失敗しました。時間をおいて再度お試しください。');
-      return;
+  const getStatusBadge = (letter: SentLetter) => {
+    if (letter.status === 'replied') {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs shadow-sm" style={{ backgroundColor: '#8fcccc', color: 'white' }}>
+          <Reply className="w-3 h-3" />
+          返信済み
+        </span>
+      );
     }
-
-    // ローカル状態から削除して即反映
-    setLetters((prev) => prev.filter((l) => l.id !== letterId));
+    if (letter.status === 'delivered') {
+      if (!letter.read_at) {
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs shadow-sm" style={{ backgroundColor: '#88aaff', color: 'white' }}>
+            <Mail className="w-3 h-3" />
+            未読
+          </span>
+        );
+      } else {
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs shadow-sm" style={{ backgroundColor: '#8fcccc', color: 'white' }}>
+            <Check className="w-3 h-3" />
+            受け取り済み
+          </span>
+        );
+      }
+    }
+    return null;
   };
-
-  const unreadCount = letters.filter((l) => !l.read_at).length;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold mb-1">受信ボックス</h1>
-        <p className="text-sm text-slate-400">
-          あなたに届いたソングレターの一覧です。開封すると既読になり、いらなくなったレターはアーカイブできます。
-        </p>
-        <p className="mt-2 text-xs text-slate-500">
-          未読受信枠: {unreadCount} / {maxInboxLetters}
+        <h1 className="mb-1">受信したソングレター</h1>
+        <p className="text-sm text-gray-600">
+          あなたがこれまでに受け取ったソングレターの一覧です。
         </p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-400">読み込み中…</p>
-      ) : error ? (
-        <p className="text-sm text-red-400">{error}</p>
+        <p className="text-sm text-gray-400">読み込み中…</p>
       ) : letters.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          まだソングレターは届いていません。
-        </p>
+        <div className="text-center py-12">
+          <SendIcon className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+          <p className="text-sm text-gray-500">
+            まだソングレターを受け取っていません。
+          </p>
+        </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {letters.map((letter) => {
-            const deliveredAt = letter.delivered_at ?? letter.created_at;
-            const deliveredText = new Date(deliveredAt).toLocaleString('ja-JP');
-            const isUnread =
-              letter.status === 'delivered' && !letter.read_at;
+            const createdDate = new Date(letter.created_at);
+            const song = songs[letter.song_id];
 
             return (
               <Link
                 key={letter.id}
                 to={`/letters/${letter.id}`}
-                className="block rounded-xl border border-slate-800 bg-slate-900/60 p-4 hover:border-sky-500/60 transition-colors"
+                className="group relative rounded-xl border border-gray-200 bg-white overflow-hidden hover:border-[#8fcccc] transition-all hover:shadow-lg"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-medium">
-                        {letter.sender_name}{' '}
-                        <span className="text-xs text-slate-500">
-                          ({deliveredText})
-                        </span>
-                      </p>
-                      {isUnread && (
-                        <span className="inline-flex items-center rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] font-semibold text-sky-300">
-                          未読
-                        </span>
-                      )}
-                      {letter.status === 'replied' && (
-                        <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-                          返信済
-                        </span>
-                      )}
+                {/* Album Art */}
+                <div className="aspect-square bg-gray-100 relative overflow-hidden">
+                  {letter.song?.thumbnail_url ? (
+                    <img
+                      src={letter.song.thumbnail_url}
+                      alt={letter.song.title || 'Album art'}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Music className="w-16 h-16 text-gray-300" />
                     </div>
-                    <p className="text-sm text-slate-200 line-clamp-2">
-                      {letter.message}
+                  )}
+                  
+                  {/* Status Badge */}
+                  <div className="absolute top-3 right-3">
+                    {getStatusBadge(letter)}
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="p-4 space-y-2">
+                  <div>
+                    <p className="font-medium text-sm line-clamp-1">
+                      {letter.song?.title || '楽曲情報なし'}
                     </p>
+                    {Array.isArray(letter.song?.songs_artists) && letter.song.songs_artists.length > 0 && (
+                      <p className="text-xs text-gray-500 line-clamp-1">
+                        {letter.song.songs_artists.map((sa: any) => sa.artist?.name).filter(Boolean).join(', ')}
+                      </p>
+                    )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={(e) => handleArchive(e, letter.id)}
-                    className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800"
-                  >
-                    アーカイブ
-                  </button>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {createdDate.toLocaleDateString('ja-JP', {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
+                    <span className="truncate max-w-[120px]">
+                      from {letter.is_anonymous ? '匿名' : letter.sender_name}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-gray-600 line-clamp-2">
+                    {letter.message}
+                  </p>
                 </div>
               </Link>
             );

@@ -1,8 +1,8 @@
-// src/pages/app/DashboardPage.tsx
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabaseClient';
 import { Link } from 'react-router-dom';
+import { PenSquare, Mail, TrendingUp, Inbox } from 'lucide-react';
 
 type Profile = {
   id: string;
@@ -102,43 +102,63 @@ export const DashboardPage = () => {
   const remainingLetters = Math.max(maxDailyLetters - sentToday, 0);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold mb-1">
-          こんにちは、{profile?.username ?? 'ユーザー'} さん
+    <div className="space-y-8">
+      {/* Welcome Section */}
+      <div className="text-center py-8">
+        <h1 className="text-3xl mb-2">
+          こんにちは、<span style={{ color: '#8fcccc' }}>{profile?.username ?? 'ユーザー'}</span> さん
         </h1>
-        <p className="text-sm text-slate-400">
-          今日も誰かにソングレターを届けてみませんか？
+        <p className="text-sm text-gray-600">
+          今日も誰かにソングレターを届けてみませんか?
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* Stats Grid */}
+      <div className="grid gap-4 md:grid-cols-2">
         {/* 今日送れるソングレター */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <p className="text-xs text-slate-400 mb-1">今日送れるソングレター</p>
+        <div className="group rounded-xl border border-gray-200 bg-white p-6 hover:border-[#8fcccc] hover:shadow-md transition-all">
+          <div className="flex items-start justify-between mb-4">
+            <div className="p-3 rounded-lg bg-[#8fcccc]/10">
+              <TrendingUp className="w-6 h-6" style={{ color: '#8fcccc' }} />
+            </div>
+            <p className="text-xs text-gray-500">本日</p>
+          </div>
+          <p className="text-xs text-gray-600 mb-1">今日送れるソングレター</p>
           {loadingCounts ? (
-            <p className="text-sm text-slate-500">計算中…</p>
+            <p className="text-sm text-gray-400">計算中…</p>
           ) : (
             <>
-              <p className="text-2xl font-semibold">
-                {remainingLetters} 通
+              <p className="text-3xl mb-2" style={{ color: '#8fcccc' }}>
+                {remainingLetters} <span className="text-base text-gray-500">通</span>
               </p>
-              <p className="mt-1 text-xs text-slate-500">
-                （本日 {sentToday} / {maxDailyLetters} 通 送信済み）
+              <p className="text-xs text-gray-500">
+                本日 {sentToday} / {maxDailyLetters} 通 送信済み
               </p>
             </>
           )}
         </div>
 
         {/* 受信ボックス（未読） */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <p className="text-xs text-slate-400 mb-1">受信ボックス（未読）</p>
+        <div className="group rounded-xl border border-gray-200 bg-white p-6 hover:border-[#8fcccc] hover:shadow-md transition-all">
+          <div className="flex items-start justify-between mb-4">
+            <div className="p-3 rounded-lg bg-[#8fcccc]/10">
+              <Inbox className="w-6 h-6" style={{ color: '#8fcccc' }} />
+            </div>
+            {unreadInbox > 0 && (
+              <span className="px-2 py-1 rounded-full text-xs" style={{ backgroundColor: '#8fcccc', color: 'white' }}>
+                {unreadInbox}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-600 mb-1">受信ボックス（未読）</p>
           {loadingCounts ? (
-            <p className="text-sm text-slate-500">計算中…</p>
+            <p className="text-sm text-gray-400">計算中…</p>
           ) : (
             <>
-              <p className="text-2xl font-semibold">{unreadInbox} 通</p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="text-3xl mb-2" style={{ color: '#8fcccc' }}>
+                {unreadInbox} <span className="text-base text-gray-500">通</span>
+              </p>
+              <p className="text-xs text-gray-500">
                 受信枠: {unreadInbox} / {maxInboxLetters}
               </p>
             </>
@@ -146,18 +166,36 @@ export const DashboardPage = () => {
         </div>
       </div>
 
-      <div className="flex gap-3">
+      {/* Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-2">
         <Link
           to="/letters/new"
-          className="rounded-md bg-sky-500 px-4 py-2 text-sm font-medium hover:bg-sky-400"
+          className="group flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-6 hover:border-[#8fcccc] hover:shadow-md transition-all"
         >
-          ソングレターを書く
+          <div className="p-4 rounded-xl group-hover:scale-110 transition-transform" style={{ backgroundColor: '#8fcccc' }}>
+            <PenSquare className="w-6 h-6 text-white" />
+          </div>
+          <div className="flex-1">
+            <h3 className="mb-1">ソングレターを書く</h3>
+            <p className="text-xs text-gray-600">
+              音楽と一緒に気持ちを届けよう
+            </p>
+          </div>
         </Link>
+
         <Link
           to="/letters/inbox"
-          className="rounded-md border border-slate-700 px-4 py-2 text-sm hover:bg-slate-900"
+          className="group flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-6 hover:border-[#8fcccc] hover:shadow-md transition-all"
         >
-          受信ボックスを開く
+          <div className="p-4 rounded-xl bg-gray-100 group-hover:bg-[#8fcccc]/10 group-hover:scale-110 transition-all">
+            <Mail className="w-6 h-6" style={{ color: '#8fcccc' }} />
+          </div>
+          <div className="flex-1">
+            <h3 className="mb-1">受信ボックスを開く</h3>
+            <p className="text-xs text-gray-600">
+              届いたソングレターを確認
+            </p>
+          </div>
         </Link>
       </div>
     </div>

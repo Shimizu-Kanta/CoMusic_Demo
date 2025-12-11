@@ -1,8 +1,8 @@
-// src/pages/app/LetterDetailPage.tsx
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
+import { Music, ExternalLink, Archive, Send, User } from 'lucide-react';
 
 type Letter = {
   id: string;
@@ -24,6 +24,7 @@ type Song = {
   provider: 'spotify' | 'youtube';
   provider_track_id: string;
   title: string;
+  artist_name?: string;
   url: string | null;
   thumbnail_url?: string | null;
 };
@@ -190,19 +191,19 @@ export const LetterDetailPage = () => {
 
   if (!user) {
     return (
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-gray-500">
         ログインしてからこのページを表示してください。
       </p>
     );
   }
 
   if (loading) {
-    return <p className="text-sm text-slate-400">読み込み中…</p>;
+    return <p className="text-sm text-gray-500">読み込み中…</p>;
   }
 
   if (error || !letter) {
     return (
-      <p className="text-sm text-red-400">
+      <p className="text-sm text-red-500">
         {error ?? 'ソングレターの読み込み中にエラーが発生しました。'}
       </p>
     );
@@ -213,7 +214,7 @@ export const LetterDetailPage = () => {
 
   if (!isSender && !isReceiver) {
     return (
-      <p className="text-sm text-red-400">
+      <p className="text-sm text-red-500">
         このソングレターを閲覧する権限がありません。
       </p>
     );
@@ -235,13 +236,14 @@ export const LetterDetailPage = () => {
     : 'あなたが送ったソングレター';
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-3xl mx-auto">
+      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold mb-1">{heading}</h1>
-          <p className="text-xs text-slate-400">{createdAt} のレター</p>
+          <h1 className="mb-1">{heading}</h1>
+          <p className="text-xs text-gray-500">{createdAt}</p>
           {letter.read_at && isReceiver && (
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               既読: {new Date(letter.read_at).toLocaleString('ja-JP')}
             </p>
           )}
@@ -251,97 +253,130 @@ export const LetterDetailPage = () => {
           <button
             type="button"
             onClick={handleArchive}
-            className="rounded-md border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800"
+            className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
           >
+            <Archive className="w-4 h-4" />
             アーカイブ
           </button>
         )}
       </div>
 
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">{letter.sender_name}</p>
-          <span className="text-xs text-slate-400">
-            {letter.is_anonymous ? '匿名レター' : 'アカウント由来のレター'}
-          </span>
-        </div>
-
+      {/* Letter Content */}
+      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+        {/* Song Info with Album Art */}
         {song && (
-          <div className="rounded-md border border-slate-700 bg-slate-950/60 p-3 text-sm flex gap-3">
-            {song.thumbnail_url && (
-              <div className="w-full max-w-xs mx-auto aspect-video">
+          <div className="md:flex">
+            {/* Album Art */}
+            <div className="md:w-64 aspect-square md:aspect-auto bg-gray-100 relative overflow-hidden flex-shrink-0">
+              {song.thumbnail_url ? (
                 <img
                   src={song.thumbnail_url}
                   alt={song.title}
-                  className="w-1/2 h-auto rounded-md object-cover"
+                  className="w-full h-full object-cover"
                 />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Music className="w-24 h-24 text-gray-300" />
+                </div>
+              )}
+            </div>
+
+            {/* Song Details */}
+            <div className="flex-1 p-6 space-y-4">
+              <div>
+                <p className="text-xs text-gray-500 mb-1">楽曲</p>
+                <h2 className="text-xl mb-1">{song.title}</h2>
+                {song.artist_name && (
+                  <p className="text-sm text-gray-600">{song.artist_name}</p>
+                )}
               </div>
-            )}
-            <div className="flex-1 space-y-1">
-              <p className="text-xs text-slate-400">曲</p>
-              <p className="font-medium">{song.title}</p>
+
               {songLink && (
                 <a
                   href={songLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs text-sky-400 hover:underline"
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm transition-colors text-white"
+                  style={{ backgroundColor: '#8fcccc' }}
                 >
-                  {song.provider === 'spotify'
-                    ? 'Spotifyで開く'
-                    : 'YouTubeで開く'}
+                  <ExternalLink className="w-4 h-4" />
+                  {song.provider === 'spotify' ? 'Spotifyで開く' : 'YouTubeで開く'}
                 </a>
               )}
             </div>
           </div>
         )}
 
-        <div>
-          <p className="text-xs text-slate-400 mb-1">メッセージ</p>
-          <p className="text-sm whitespace-pre-wrap">{letter.message}</p>
+        {/* Sender Info */}
+        <div className="border-t border-gray-200 p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#8fcccc]/10 flex items-center justify-center">
+              <User className="w-5 h-5" style={{ color: '#8fcccc' }} />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">差出人</p>
+              <p className="font-medium">{letter.sender_name}</p>
+            </div>
+          </div>
+
+          {/* Message */}
+          <div>
+            <p className="text-xs text-gray-500 mb-2">メッセージ</p>
+            <p className="text-sm whitespace-pre-wrap leading-relaxed text-gray-700">
+              {letter.message}
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-3">
-        <h2 className="text-sm font-semibold">感想・返信</h2>
+      {/* Replies Section */}
+      <div className="space-y-4">
+        <h2 className="flex items-center gap-2">
+          <Send className="w-5 h-5" style={{ color: '#8fcccc' }} />
+          感想・返信
+        </h2>
 
         {replies.length === 0 ? (
-          <p className="text-xs text-slate-400">まだ返信はありません。</p>
+          <p className="text-xs text-gray-500 px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
+            まだ返信はありません。
+          </p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {replies.map((r) => (
               <div
                 key={r.id}
-                className="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+                className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
               >
-                <p className="text-xs text-slate-400 mb-1">
+                <p className="text-xs text-gray-500 mb-2">
                   {new Date(r.created_at).toLocaleString('ja-JP')}
                 </p>
-                <p className="text-sm whitespace-pre-wrap">{r.content}</p>
+                <p className="text-sm whitespace-pre-wrap leading-relaxed text-gray-700">{r.content}</p>
               </div>
             ))}
           </div>
         )}
 
-        {/* 返信フォーム：受信者だけ */}
+        {/* Reply Form: 受信者だけ */}
         {isReceiver && (
-          <form onSubmit={handleReplySubmit} className="space-y-2">
+          <form onSubmit={handleReplySubmit} className="space-y-3">
             <textarea
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm min-h-[80px]"
-              placeholder="このレターへの感想やお礼を書いてみましょう。（任意）"
+              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm min-h-[120px] focus:border-[#8fcccc] focus:outline-none transition-colors"
+              placeholder="このレターへの感想やお礼を書いてみましょう（任意）"
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
             />
             {error && (
-              <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
                 {error}
               </p>
             )}
             <button
               type="submit"
               disabled={sendingReply || !replyText.trim()}
-              className="rounded-md bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed text-white"
+              style={{ backgroundColor: '#8fcccc' }}
             >
+              <Send className="w-4 h-4" />
               {sendingReply ? '送信中…' : '感想を送る'}
             </button>
           </form>
@@ -349,7 +384,7 @@ export const LetterDetailPage = () => {
 
         {/* 送り主向け説明 */}
         {isSender && (
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-gray-500 px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
             これはあなたが送ったソングレターです。ここで相手からの感想を読むことができます。
           </p>
         )}
