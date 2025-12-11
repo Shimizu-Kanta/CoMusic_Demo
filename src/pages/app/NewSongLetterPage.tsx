@@ -287,60 +287,58 @@ export const NewSongLetterPage = () => {
       .select('id')
       .neq('id', user.id);
 
-    if (candidatesError) {
-      console.warn('候補ユーザー取得エラー:', candidatesError);
+    if (candidatesError || !candidates || candidates.length === 0) {
+      console.warn('候補ユーザー取得エラーまたは対象なし:', candidatesError);
       return false;
     }
 
-    if (!candidates || candidates.length === 0) {
-      console.log('配達候補がいないため、queued のままにします。');
-      return false;
-    }
+    const receiverStats: { id: string; unreadCount: number }[] = [];
 
-    const ids = candidates.map((c) => c.id as string);
-    for (let i = ids.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [ids[i], ids[j]] = [ids[j], ids[i]];
-    }
-
-    for (const receiverId of ids) {
+    for (const c of candidates) {
       const { count, error: countError } = await supabase
         .from('song_letters')
         .select('id', { count: 'exact', head: true })
-        .eq('receiver_id', receiverId)
+        .eq('receiver_id', c.id)
         .in('status', ['delivered', 'replied'])
         .is('archived_at', null)
         .is('read_at', null);
 
       if (countError) {
-        console.warn('受信レター数カウントエラー:', countError);
+        console.warn(`ユーザー ${c.id} の未読数取得エラー:`, countError);
         continue;
       }
 
-      if ((count ?? 0) >= maxInbox) {
-        continue;
+      if ((count ?? 0) < maxInbox) {
+        receiverStats.push({ id: c.id, unreadCount: count ?? 0 });
       }
-
-      const { error: updateError } = await supabase
-        .from('song_letters')
-        .update({
-          receiver_id: receiverId,
-          status: 'delivered',
-          delivered_at: new Date().toISOString(),
-        })
-        .eq('id', letterId);
-
-      if (updateError) {
-        console.warn('ソングレター配達エラー:', updateError);
-        continue;
-      }
-
-      console.log('ソングレターを配達しました。receiver_id =', receiverId);
-      return true;
     }
 
-    console.log('受け取れるユーザーがいないため、queued のままにします。');
-    return false;
+    if (receiverStats.length === 0) {
+      console.log('未読上限を超えていないユーザーが見つからず、queued のままにします。');
+      return false;
+    }
+
+    // 未読数が少ない順にソート
+    receiverStats.sort((a, b) => a.unreadCount - b.unreadCount);
+
+    const receiverId = receiverStats[0].id;
+
+    const { error: updateError } = await supabase
+      .from('song_letters')
+      .update({
+        receiver_id: receiverId,
+        status: 'delivered',
+        delivered_at: new Date().toISOString(),
+      })
+      .eq('id', letterId);
+
+    if (updateError) {
+      console.warn('配達失敗:', updateError);
+      return false;
+    }
+
+    console.log(`未読数の少ないユーザー(${receiverId})に配達成功`);
+    return true;
   };
 
   const handleSubmit = async (e: FormEvent) => {
