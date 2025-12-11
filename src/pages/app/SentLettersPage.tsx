@@ -34,37 +34,24 @@ export const SentLettersPage = () => {
     const fetchSent = async () => {
       setLoading(true);
 
-      const { data, error } = await supabase
+      const { data: lettersData, error: lettersError } = await supabase
         .from('song_letters')
-        .select('id, receiver_id, sender_name, message, status, created_at, delivered_at, song_id')
+        .select(`
+        id, sender_name, message, status, created_at, song_id,
+        song:song_id (id, title, thumbnail_url, songs_artists (artist:artist_id (name)))
+        `)
         .eq('sender_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error(error);
+      if (lettersError || !lettersData) {
+        console.error(lettersError);
         setLetters([]);
-      } else {
-        setLetters(data ?? []);
-
-        // 楽曲情報を取得
-        const songIds = [...new Set((data ?? []).map((l: any) => l.song_id))];
-        if (songIds.length > 0) {
-          const { data: songsData } = await supabase
-            .from('songs')
-            .select('id, title, artist_name, thumbnail_url')
-            .in('id', songIds);
-
-          if (songsData) {
-            const songsMap: Record<string, Song> = {};
-            songsData.forEach((s: any) => {
-              songsMap[s.id] = s;
-            });
-            setSongs(songsMap);
-          }
-        }
+        setLoading(false);
+        return;
       }
-
+      setLetters(lettersData);
       setLoading(false);
+
     };
 
     fetchSent();
@@ -85,7 +72,7 @@ export const SentLettersPage = () => {
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
           <Reply className="w-3 h-3" />
-          返信済み
+          返信あり
         </span>
       );
     }
@@ -132,10 +119,10 @@ export const SentLettersPage = () => {
               >
                 {/* Album Art */}
                 <div className="aspect-square bg-gray-100 relative overflow-hidden">
-                  {song?.thumbnail_url ? (
+                  {letter.song?.thumbnail_url ? (
                     <img
-                      src={song.thumbnail_url}
-                      alt={song.title || 'Album art'}
+                      src={letter.song.thumbnail_url}
+                      alt={letter.song.title || 'Album art'}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                   ) : (
@@ -154,7 +141,7 @@ export const SentLettersPage = () => {
                 <div className="p-4 space-y-2">
                   <div>
                     <p className="font-medium text-sm line-clamp-1">
-                      {song?.title || '楽曲情報なし'}
+                      {letter.song?.title || '楽曲情報なし'}
                     </p>
                     {song?.artist_name && (
                       <p className="text-xs text-gray-500 line-clamp-1">
