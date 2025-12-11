@@ -26,6 +26,10 @@ type YouTubeVideoMeta = {
   url: string;
   imageUrl: string | null;
   durationSec: number | null;
+  // Supabase function now returns channel_url (e.g. https://www.youtube.com/channel/XYZ)
+  channel_url?: string;
+  // also accept camelCase just in case
+  channelUrl?: string;
 };
 
 export const NewSongLetterPage = () => {
@@ -577,6 +581,71 @@ export const NewSongLetterPage = () => {
           }
 
           songId = insertedSong.id;
+        }
+
+        // YouTube の場合はチャンネルを artists テーブルに登録して songs_artists に紐づける
+        try {
+          const channelProviderId =
+            (ytMeta && (ytMeta.channel_url ?? ytMeta.channelUrl)) || null;
+
+          if (channelProviderId && songId) {
+            let artistId: string | null = null;
+
+            const { data: existingArtists, error: selectArtistError } =
+              await supabase
+                .from('artists')
+                .select('id')
+                .eq('provider', 'youtube')
+                .eq('provider_artist_id', channelProviderId)
+                .limit(1);
+
+            if (selectArtistError) {
+              console.error(selectArtistError);
+              throw new Error('アーティスト情報の取得に失敗しました。');
+            }
+
+            if (existingArtists && existingArtists.length > 0) {
+              artistId = existingArtists[0].id;
+            } else {
+              const { data: insertedArtist, error: insertArtistError } =
+                await supabase
+                  .from('artists')
+                  .insert({
+                    name: ytMeta?.channelTitle ?? 'YouTube Channel',
+                    provider: 'youtube',
+                    provider_artist_id: channelProviderId,
+                  })
+                  .select('id')
+                  .single();
+
+              if (insertArtistError || !insertedArtist) {
+                console.error(insertArtistError);
+                throw new Error('アーティスト情報の保存に失敗しました。');
+              }
+
+              artistId = insertedArtist.id;
+            }
+
+            if (artistId) {
+              const rows = [
+                {
+                  song_id: songId,
+                  artist_id: artistId,
+                },
+              ];
+
+              const { error: saError } = await supabase
+                .from('songs_artists')
+                .insert(rows);
+
+              if (saError) {
+                console.warn('songs_artists 挿入エラー:', saError);
+              }
+            }
+          }
+        } catch (e) {
+          // artist 周りで失敗しても致命的ではないので warn のみ
+          console.warn('YouTube channel -> artist 処理でエラー:', e);
         }
       }
 
