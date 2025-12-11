@@ -1,8 +1,8 @@
-// src/pages/app/NewSongLetterPage.tsx
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
+import { Search, Music, AlertCircle, X } from 'lucide-react';
 
 type Provider = 'spotify' | 'youtube';
 
@@ -49,11 +49,9 @@ export const NewSongLetterPage = () => {
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   const [selectedTrack, setSelectedTrack] = useState<SpotifyTrack | null>(null);
 
-  // YouTube 用（暫定：手入力）
+  // YouTube 用
   const [ytInput, setYtInput] = useState('');
   const [ytTitle, setYtTitle] = useState('');
-
-  // YouTube 用
   const [ytMeta, setYtMeta] = useState<YouTubeVideoMeta | null>(null);
   const [ytMetaLoading, setYtMetaLoading] = useState(false);
   const [ytMetaError, setYtMetaError] = useState<string | null>(null);
@@ -73,7 +71,6 @@ export const NewSongLetterPage = () => {
   const [limitExceeded, setLimitExceeded] = useState(false);
 
   if (!user) {
-    // PrivateRoute でガードしているはずだけど念のため
     return null;
   }
 
@@ -275,14 +272,12 @@ export const NewSongLetterPage = () => {
     }
   };
 
-
   const assignRandomReceiver = async (
     letterId: string,
     maxInbox: number
   ): Promise<boolean> => {
     if (!user) return false;
 
-    // 1. 自分以外の全ユーザーを候補として取得
     const { data: candidates, error: candidatesError } = await supabase
       .from('profiles')
       .select('id')
@@ -294,19 +289,16 @@ export const NewSongLetterPage = () => {
     }
 
     if (!candidates || candidates.length === 0) {
-      // まだ他のユーザーがいない
       console.log('配達候補がいないため、queued のままにします。');
       return false;
     }
 
-    // 2. 候補をランダムシャッフル
     const ids = candidates.map((c) => c.id as string);
     for (let i = ids.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [ids[i], ids[j]] = [ids[j], ids[i]];
     }
 
-    // 3. 1人ずつ「受信レターが未読上限未満か」をチェックし、OKな人がいたら配達
     for (const receiverId of ids) {
       const { count, error: countError } = await supabase
         .from('song_letters')
@@ -314,7 +306,7 @@ export const NewSongLetterPage = () => {
         .eq('receiver_id', receiverId)
         .in('status', ['delivered', 'replied'])
         .is('archived_at', null)
-        .is('read_at', null); // 未読のみ
+        .is('read_at', null);
 
       if (countError) {
         console.warn('受信レター数カウントエラー:', countError);
@@ -351,7 +343,6 @@ export const NewSongLetterPage = () => {
     e.preventDefault();
     setError(null);
 
-    // まずクライアント側の上限チェック（ページ入場時に計算した値）
     if (limitCheckLoading) {
       setError('送信回数を確認しています。少し待ってから再度お試しください。');
       return;
@@ -381,7 +372,6 @@ export const NewSongLetterPage = () => {
     setLoading(true);
 
     try {
-      // サーバ側でもう一度送信回数・受信枠を確認（ダブルガード）
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const tommorow = new Date(today);
@@ -411,7 +401,7 @@ export const NewSongLetterPage = () => {
         .eq('receiver_id', user.id)
         .in('status', ['delivered', 'replied'])
         .is('archived_at', null)
-        .is('read_at', null); // 未読のみ
+        .is('read_at', null);
 
       if (inboxError) {
         console.error(inboxError);
@@ -427,14 +417,12 @@ export const NewSongLetterPage = () => {
       let songId: string | null = null;
 
       if (provider === 'spotify') {
-        // Spotify の場合：曲を1つ選んでいること
         if (!selectedTrack) {
           setLoading(false);
           setError('Spotifyの検索結果から曲を1つ選択してください。');
           return;
         }
 
-        // 1. songs を UPSERT 的に扱う
         const { data: existingSongs, error: selectSongError } = await supabase
           .from('songs')
           .select('id')
@@ -471,7 +459,6 @@ export const NewSongLetterPage = () => {
           songId = insertedSong.id;
         }
 
-        // 2. artists / songs_artists を保存
         const artistIds: string[] = [];
 
         for (const artist of selectedTrack.artists) {
@@ -597,7 +584,6 @@ export const NewSongLetterPage = () => {
         throw new Error('楽曲情報の保存に失敗しました。');
       }
 
-      // 3. song_letters に INSERT（最初は queued）
       const { data: insertedLetter, error: insertLetterError } = await supabase
         .from('song_letters')
         .insert({
@@ -617,7 +603,6 @@ export const NewSongLetterPage = () => {
         throw new Error('ソングレターの送信に失敗しました。');
       }
 
-      // 4. ランダム受信者割り当てを試みる
       await assignRandomReceiver(insertedLetter.id, maxInboxLetters);
 
       navigate('/app', { replace: true });
@@ -630,232 +615,284 @@ export const NewSongLetterPage = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl mx-auto">
       <div>
-        <h1 className="text-xl font-semibold mb-1">ソングレターを書く</h1>
-        <p className="text-sm text-slate-400">
-          誰かに曲とメッセージを届けましょう。
-          今は Spotify 検索から曲を選ぶか、YouTube のURL/IDを直接入力できます。
+        <h1 className="mb-1">ソングレターを書く</h1>
+        <p className="text-sm text-gray-600">
+          誰かに曲とメッセージを届けましょう。Spotify検索から曲を選ぶか、YouTubeのURL/IDを入力できます。
         </p>
       </div>
 
       {/* 上限チェックの結果表示 */}
       {limitCheckLoading ? (
-        <p className="text-xs text-slate-500">
+        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
           今日送れるソングレターの残り回数を確認しています…
-        </p>
-      ) : limitExceeded ? (
-        <div className="rounded-md border border-red-900 bg-red-950/60 px-3 py-2 text-xs text-red-200">
-          今日送れるソングレターの上限（{maxDailyLetters}通）に達しました。
-          明日また送ってみてください。
-          <br />
-          本日はすでに {sentToday} 通送信しています。
         </div>
-      ) : null}
+      ) : limitExceeded ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">今日の送信上限に達しました</p>
+            <p className="text-xs mt-1">
+              本日は既に {sentToday} / {maxDailyLetters} 通送信済みです。明日また送ってみてください。
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+          今日はあと <span style={{ color: '#8fcccc' }} className="font-medium">{maxDailyLetters - sentToday}</span> 通送信できます
+        </div>
+      )}
 
-      <form onSubmit={handleSubmit} className="space-y-5 max-w-xl">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* 送り主の表示名 */}
-        <div className="space-y-2">
-          <label className="block text-sm">送り主として表示する名前</label>
+        <div className="space-y-3">
+          <label className="block text-sm text-gray-700">送り主の表示名</label>
 
           {profileLoading ? (
-            <p className="text-xs text-slate-400">プロフィールを読み込み中です…</p>
+            <p className="text-sm text-gray-500">プロフィールを読み込み中…</p>
           ) : profileError ? (
-            <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
               {profileError}
-            </p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                className={`rounded-md border px-3 py-2 text-sm text-left ${
-                  !isAnonymous
-                    ? 'border-sky-500 bg-sky-500/10'
-                    : 'border-slate-700 bg-slate-950'
-                }`}
-                onClick={() => setIsAnonymous(false)}
-                disabled={!profileName}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">ユーザ名で送る</span>
-                  <span
-                    className={`h-4 w-4 rounded-full border ${
-                      !isAnonymous ? 'border-sky-400 bg-sky-500/60' : 'border-slate-500'
-                    }`}
-                  />
-                </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  表示名：{profileName ?? '（取得できませんでした）'}
-                </p>
-              </button>
-
-              <button
-                type="button"
-                className={`rounded-md border px-3 py-2 text-sm text-left ${
-                  isAnonymous
-                    ? 'border-sky-500 bg-sky-500/10'
-                    : 'border-slate-700 bg-slate-950'
-                }`}
-                onClick={() => setIsAnonymous(true)}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">匿名で送る</span>
-                  <span
-                    className={`h-4 w-4 rounded-full border ${
-                      isAnonymous ? 'border-sky-400 bg-sky-500/60' : 'border-slate-500'
-                    }`}
-                  />
-                </div>
-                <p className="mt-1 text-xs text-slate-400">表示名：匿名</p>
-              </button>
             </div>
-          )}
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  className={`rounded-lg border px-4 py-3 text-sm text-left transition-all ${
+                    !isAnonymous
+                      ? 'border-[#8fcccc] bg-[#8fcccc]/5 shadow-sm'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                  onClick={() => setIsAnonymous(false)}
+                  disabled={!profileName}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium">ユーザー名で送る</span>
+                    <span
+                      className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${
+                        !isAnonymous ? 'border-[#8fcccc]' : 'border-gray-300'
+                      }`}
+                    >
+                      {!isAnonymous && (
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#8fcccc' }} />
+                      )}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    表示名: {profileName ?? '（取得できませんでした）'}
+                  </p>
+                </button>
 
-          <p className="mt-1 text-xs text-slate-500">
-            相手にはここで選んだ名前だけが表示されます。
-          </p>
+                <button
+                  type="button"
+                  className={`rounded-lg border px-4 py-3 text-sm text-left transition-all ${
+                    isAnonymous
+                      ? 'border-[#8fcccc] bg-[#8fcccc]/5 shadow-sm'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                  onClick={() => setIsAnonymous(true)}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium">匿名で送る</span>
+                    <span
+                      className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${
+                        isAnonymous ? 'border-[#8fcccc]' : 'border-gray-300'
+                      }`}
+                    >
+                      {isAnonymous && (
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#8fcccc' }} />
+                      )}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500">表示名: 匿名</p>
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                相手にはここで選んだ名前だけが表示されます
+              </p>
+            </>
+          )}
         </div>
 
         {/* 曲のサービス選択 */}
-        <div className="space-y-2">
-          <label className="block text-sm">曲のサービス</label>
-          <div className="flex gap-3">
+        <div className="space-y-3">
+          <label className="block text-sm text-gray-700">曲のサービスを選択</label>
+          <div className="grid gap-3 sm:grid-cols-2">
             <button
               type="button"
-              className={`flex-1 rounded-md border px-3 py-2 text-sm ${
+              className={`rounded-lg border px-4 py-3 text-sm transition-all ${
                 provider === 'spotify'
-                  ? 'border-sky-500 bg-sky-500/10'
-                  : 'border-slate-700 bg-slate-950'
+                  ? 'border-[#8fcccc] bg-[#8fcccc]/5 shadow-sm'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
               onClick={() => setProvider('spotify')}
             >
-              Spotify（検索）
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Spotify検索</span>
+                <span
+                  className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${
+                    provider === 'spotify' ? 'border-[#8fcccc]' : 'border-gray-300'
+                  }`}
+                >
+                  {provider === 'spotify' && (
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#8fcccc' }} />
+                  )}
+                </span>
+              </div>
             </button>
             <button
               type="button"
-              className={`flex-1 rounded-md border px-3 py-2 text-sm ${
+              className={`rounded-lg border px-4 py-3 text-sm transition-all ${
                 provider === 'youtube'
-                  ? 'border-sky-500 bg-sky-500/10'
-                  : 'border-slate-700 bg-slate-950'
+                  ? 'border-[#8fcccc] bg-[#8fcccc]/5 shadow-sm'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
               onClick={() => setProvider('youtube')}
             >
-              YouTube（URL/ID）
+              <div className="flex items-center justify-between">
+                <span className="font-medium">YouTube URL/ID</span>
+                <span
+                  className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${
+                    provider === 'youtube' ? 'border-[#8fcccc]' : 'border-gray-300'
+                  }`}
+                >
+                  {provider === 'youtube' && (
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#8fcccc' }} />
+                  )}
+                </span>
+              </div>
             </button>
           </div>
         </div>
 
         {/* Spotify 検索 UI */}
         {provider === 'spotify' && (
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <label className="block text-sm">Spotifyで曲を検索</label>
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                  placeholder="曲名やアーティスト名で検索"
-                  value={spotifyQuery}
-                  onChange={(e) => setSpotifyQuery(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={handleSpotifySearch}
-                  disabled={spotifyLoading}
-                  className="rounded-md bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
-                >
-                  {spotifyLoading ? '検索中…' : '検索'}
-                </button>
-              </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
+            <h3 className="flex items-center gap-2">
+              <Search className="w-5 h-5" style={{ color: '#8fcccc' }} />
+              Spotifyで曲を検索
+            </h3>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-[#8fcccc] focus:outline-none transition-colors"
+                placeholder="曲名やアーティスト名で検索"
+                value={spotifyQuery}
+                onChange={(e) => setSpotifyQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSpotifySearch();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleSpotifySearch}
+                disabled={spotifyLoading}
+                className="rounded-lg px-5 py-2.5 text-sm transition-all disabled:opacity-50 text-white"
+                style={{ backgroundColor: '#8fcccc' }}
+              >
+                {spotifyLoading ? '検索中…' : '検索'}
+              </button>
             </div>
 
             {spotifyError && (
-              <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
                 {spotifyError}
-              </p>
+              </div>
             )}
 
             {spotifyResults.length > 0 && !selectedTrack && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium">
-                  検索結果
+              <div className="space-y-3">
+                <p className="text-sm text-gray-700 font-medium">
+                  検索結果 ({spotifyResults.length}件)
                 </p>
                 
-                <div className="flex gap-2 overflow-x-auto pb-2 pr-1">
+                <div className="grid gap-3 sm:grid-cols-2">
                   {spotifyResults.map((track) => (
                     <button
                       type="button"
                       key={track.id}
                       onClick={() => setSelectedTrack(track)}
-                      className="flex-shrink-0 w-44 rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 flex flex-col items-center text-center hover:border-sky-500/70"
+                      className="rounded-lg border border-gray-200 bg-white hover:border-[#8fcccc] hover:shadow-md transition-all p-3 text-left"
                     >
-                      {track.imageUrl && (
-                        <div className="w-20 h-20 sm:w-24 sm:h-24 mb-2">
+                      <div className="flex gap-3">
+                        {track.imageUrl ? (
                           <img
                             src={track.imageUrl}
                             alt={track.name}
-                            className="max-w-[80px] max-h-[80px] w-auto h-auto rounded-md object-cover"
+                            className="w-16 h-16 rounded object-cover flex-shrink-0"
                           />
+                        ) : (
+                          <div className="w-16 h-16 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
+                            <Music className="w-6 h-6 text-gray-300" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium line-clamp-1">{track.name}</p>
+                          <p className="text-xs text-gray-500 line-clamp-1 mt-1">
+                            {track.artists.map((a) => a.name).join(', ')}
+                          </p>
                         </div>
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{ track.name }</p>
-                        <p className="text-xs text-slate-400 truncate">
-                          {track.artists.map((a) => a.name).join(', ')}
-                        </p>
                       </div>
                     </button>
                   ))}
                 </div>
-
-                <p className="text-[11px] text-slate-500">
-                  左右にスクロールして曲を選んでください。
-                </p>
               </div>
             )}
 
             {selectedTrack && (
-              <div className="rounded-md border border-sky-500/60 bg-sky-500/5 p-3 items-center justify-between gap-3">
-                <p className="text-sm text-slate-400 mb-0.5">選択中の曲</p>
+              <div className="rounded-lg border-2 p-4 space-y-3" style={{ borderColor: '#8fcccc', backgroundColor: '#8fcccc10' }}>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-medium" style={{ color: '#8fcccc' }}>選択中の曲</p>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTrack(null)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
 
+                <div className="flex gap-4">
                   {selectedTrack.imageUrl && (
-                    <div className="w-24 h-24 sm:w-28 sm:h-28"> 
-                      <img
-                        src={selectedTrack.imageUrl}
-                        alt={selectedTrack.name}
-                        className="w-full h-full rounded-md object-cover"
-                      />
-                    </div>
+                    <img
+                      src={selectedTrack.imageUrl}
+                      alt={selectedTrack.name}
+                      className="w-24 h-24 rounded-lg object-cover flex-shrink-0"
+                    />
                   )}
-
-                <p className="text-sm font-medium line-clamp-2">
-                  {selectedTrack.name}
-                </p>
-                <p className="text-xs text-slate-400 line-clamp-1">
-                  {selectedTrack.artists.map((a) => a.name).join(', ')}
-                </p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium line-clamp-2">{selectedTrack.name}</p>
+                    <p className="text-sm text-gray-600 line-clamp-1 mt-1">
+                      {selectedTrack.artists.map((a) => a.name).join(', ')}
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
-
-            <button
-              type="button"
-              onClick={() => setSelectedTrack(null)}
-              className="rounded-md border border-red-500 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10"
-            >
-              選択をクリアする
-            </button>
-
           </div>
         )}
 
         {/* YouTube 入力 UI */}
         {provider === 'youtube' && (
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <label className="block text-sm">YouTube の URL または動画ID</label>
+          <div className="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
+            <h3 className="flex items-center gap-2">
+              <Music className="w-5 h-5" style={{ color: '#8fcccc' }} />
+              YouTubeの動画情報
+            </h3>
+
+            <div>
+              <label className="block text-sm text-gray-700 mb-2">YouTube URL または動画ID</label>
               <div className="flex gap-2">
                 <input
-                  className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                  placeholder="例：https://www.youtube.com/watch?v=XXXXXXXXXXX"
+                  type="text"
+                  className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-[#8fcccc] focus:outline-none transition-colors"
+                  placeholder="例: https://www.youtube.com/watch?v=XXXXXXXXXXX"
                   value={ytInput}
                   onChange={(e) => {
                     setYtInput(e.target.value);
@@ -866,60 +903,62 @@ export const NewSongLetterPage = () => {
                   type="button"
                   onClick={handleFetchYouTubeMeta}
                   disabled={ytMetaLoading}
-                  className="rounded-md bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+                  className="rounded-lg px-5 py-2.5 text-sm transition-all disabled:opacity-50 text-white"
+                  style={{ backgroundColor: '#8fcccc' }}
                 >
                   {ytMetaLoading ? '取得中…' : '情報取得'}
                 </button>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                URL または 動画IDからタイトルやサムネイルを自動取得します。
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm">動画 タイトル</label>
-              <input
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                placeholder="曲のタイトルを入力"
-                value={ytTitle}
-                onChange={(e) => setYtTitle(e.target.value)}
-              />
-              <p className="text-[11px] text-slate-500 mt-1">
-                動画タイトルを手動で編集できます。
+              <p className="text-xs text-gray-500 mt-2">
+                URLまたは動画IDからタイトルやサムネイルを自動取得します
               </p>
             </div>
 
             {ytMetaError && (
-              <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
                 {ytMetaError}
-              </p>
+              </div>
             )}
 
             {ytMeta && (
-              <div className="rounded-md border border-sky-500/60 bg-sky-500/5 p-3 flex flex-col items-center text-center gap-2">
-                <p className="text-xs text-slate-400">取得した動画情報</p>
+              <div className="rounded-lg border-2 p-4 space-y-3" style={{ borderColor: '#8fcccc', backgroundColor: '#8fcccc10' }}>
+                <p className="text-sm font-medium" style={{ color: '#8fcccc' }}>取得した動画情報</p>
                 
                 {ytMeta.imageUrl && (
-                  <div className="w-full max-w-xs mx-auto aspect-video mb-2">
-                    <img
-                      src={ytMeta.imageUrl}
-                      alt={ytMeta.title}
-                      className="w-full h-full rounded-md object-cover"
-                    />
-                  </div>
+                  <img
+                    src={ytMeta.imageUrl}
+                    alt={ytMeta.title}
+                    className="w-full aspect-video rounded-lg object-cover"
+                  />
                 )}
-                <p className="text-sm font-medium line-clamp-2">{ytMeta.title}</p>
-                <p className="text-xs text-slate-400 line-clamp-1">{ytMeta.channelTitle}</p>
+                <div>
+                  <p className="font-medium line-clamp-2">{ytMeta.title}</p>
+                  <p className="text-sm text-gray-600 mt-1">{ytMeta.channelTitle}</p>
+                </div>
               </div>
             )}
+
+            <div>
+              <label className="block text-sm text-gray-700 mb-2">動画タイトル（編集可能）</label>
+              <input
+                type="text"
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-[#8fcccc] focus:outline-none transition-colors"
+                placeholder="曲のタイトルを入力"
+                value={ytTitle}
+                onChange={(e) => setYtTitle(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                自動取得したタイトルを手動で編集できます
+              </p>
+            </div>
           </div>
         )}
 
         {/* メッセージ */}
         <div className="space-y-2">
-          <label className="block text-sm">メッセージ</label>
+          <label className="block text-sm text-gray-700">メッセージ</label>
           <textarea
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm min-h-[120px]"
+            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm min-h-[140px] focus:border-[#8fcccc] focus:outline-none transition-colors"
             placeholder="この曲に込めた気持ちや、伝えたいことを書いてみましょう。"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
@@ -927,9 +966,10 @@ export const NewSongLetterPage = () => {
         </div>
 
         {error && (
-          <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
-            {error}
-          </p>
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <p>{error}</p>
+          </div>
         )}
 
         <button
@@ -941,7 +981,8 @@ export const NewSongLetterPage = () => {
             limitExceeded ||
             limitCheckLoading
           }
-          className="rounded-md bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+          className="w-full rounded-lg py-3 text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-sm"
+          style={{ backgroundColor: '#8fcccc' }}
         >
           {loading ? '送信中…' : 'ソングレターを投函する'}
         </button>
