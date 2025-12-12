@@ -27,7 +27,6 @@ type Song = {
 export const InboxPage = () => {
   const { user } = useAuth();
   const [letters, setLetters] = useState<SentLetter[]>([]);
-  const [songs, setSongs] = useState<Record<string, Song>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -112,7 +111,6 @@ export const InboxPage = () => {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {letters.map((letter) => {
             const createdDate = new Date(letter.created_at);
-            const song = songs[letter.song_id];
 
             return (
               <Link

@@ -37,7 +37,7 @@ export const LoginPage = () => {
             <Music className="w-10 h-10" style={{ color: '#8fcccc' }} />
             <h1 className="text-3xl">CoMusic</h1>
           </div>
-          <p className="text-sm text-gray-600">音楽で繋がる、想いを���ける</p>
+          <p className="text-sm text-gray-600">音楽で繋がる、想いを届ける</p>
         </div>
 
         {/* Login Form */}

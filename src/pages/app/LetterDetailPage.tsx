@@ -251,7 +251,7 @@ export const LetterDetailPage = () => {
       <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
         {song && (
           <div className="md:flex">
-            <div className="md:w-64 aspect-square md:aspect-auto bg-gray-100 relative overflow-hidden flex-shrink-0">
+            <div className="md:w-64 aspect-square md:aspect-auto bg-gray-100 relative overflow-hidden shrink-0">
               {song.thumbnail_url ? (
                 <img src={song.thumbnail_url} alt={song.title} className="w-full h-full object-cover" />
               ) : (

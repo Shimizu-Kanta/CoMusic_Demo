@@ -67,7 +67,7 @@ export const NewSongLetterPage = () => {
   // 制限設定用
   const [maxDailyLetters, setMaxDailyLetters] = useState<number>(5);
   const [maxInboxLetters, setMaxInboxLetters] = useState<number>(10);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [, setSettingsLoaded] = useState(false);
 
   // 今日の送信状況
   const [sentToday, setSentToday] = useState(0);
@@ -376,15 +376,15 @@ export const NewSongLetterPage = () => {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const tommorow = new Date(today);
-      tommorow.setDate(tommorow.getDate() + 1);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
 
       const { count: sentCount, error: sentcountError } = await supabase
         .from('song_letters')
         .select('id', { count: 'exact', head: true })
         .eq('sender_id', user.id)
         .gte('created_at', today.toISOString())
-        .lt('created_at', tommorow.toISOString());
+        .lt('created_at', tomorrow.toISOString());
 
       if (sentcountError) {
         console.error(sentcountError);
@@ -697,7 +697,7 @@ export const NewSongLetterPage = () => {
         </div>
       ) : limitExceeded ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <div>
             <p className="font-medium">今日の送信上限に達しました</p>
             <p className="text-xs mt-1">
@@ -892,10 +892,10 @@ export const NewSongLetterPage = () => {
                           <img
                             src={track.imageUrl}
                             alt={track.name}
-                            className="w-16 h-16 rounded object-cover flex-shrink-0"
+                            className="w-16 h-16 rounded object-cover shrink-0"
                           />
                         ) : (
-                          <div className="w-16 h-16 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
+                          <div className="w-16 h-16 rounded bg-gray-100 flex items-center justify-center shrink-0">
                             <Music className="w-6 h-6 text-gray-300" />
                           </div>
                         )}
@@ -930,7 +930,7 @@ export const NewSongLetterPage = () => {
                     <img
                       src={selectedTrack.imageUrl}
                       alt={selectedTrack.name}
-                      className="w-24 h-24 rounded-lg object-cover flex-shrink-0"
+                      className="w-24 h-24 rounded-lg object-cover shrink-0"
                     />
                   )}
                   <div className="min-w-0 flex-1">
@@ -1034,7 +1034,7 @@ export const NewSongLetterPage = () => {
 
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <p>{error}</p>
           </div>
         )}
