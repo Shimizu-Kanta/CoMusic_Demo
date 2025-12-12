@@ -1,0 +1,29 @@
+name: Allocate Queued Letters
+
+on:
+  schedule:
+    - cron: "0 * * * *"  # 毎時0分に実行（例：13:00、14:00…）
+  workflow_dispatch:      # 手動実行も可能にする
+
+jobs:
+  invoke-edge-function:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - name: リポジトリをチェックアウト（省略可）
+        uses: actions/checkout@v4
+
+      - name: Supabase CLI をセットアップ
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Edge Function を実行
+        run: |
+          curl -X POST "https://${SUPABASE_PROJECT_REF}.functions.supabase.co/Periodic-queue-allocation" \
+               -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+               -H "Content-Type: application/json" \
+               -d '{}'
