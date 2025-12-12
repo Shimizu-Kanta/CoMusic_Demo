@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
-import { Music, Clock, Check, Reply, Mail, Send as SendIcon } from 'lucide-react';
+import { Music, Clock, Check, Reply, Send as SendIcon } from 'lucide-react';
 
 type SentLetter = {
   id: string;
@@ -13,8 +13,6 @@ type SentLetter = {
   created_at: string;
   delivered_at: string | null;
   song_id: string;
-  is_anonymous: boolean;
-  read_at: string | null;
 };
 
 type Song = {
@@ -24,9 +22,10 @@ type Song = {
   thumbnail_url?: string | null;
 };
 
-export const InboxPage = () => {
+export const SentLettersPage = () => {
   const { user } = useAuth();
   const [letters, setLetters] = useState<SentLetter[]>([]);
+  const [songs] = useState<Record<string, Song>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,10 +37,10 @@ export const InboxPage = () => {
       const { data: lettersData, error: lettersError } = await supabase
         .from('song_letters')
         .select(`
-        id, sender_name, message, status, created_at, song_id, is_anonymous, read_at,
+        id, sender_name, message, status, created_at, song_id,
         song:song_id (id, title, thumbnail_url, songs_artists (artist:artist_id (name)))
         `)
-        .eq('receiver_id', user.id)
+        .eq('sender_id', user.id)
         .order('created_at', { ascending: false });
 
       if (lettersError || !lettersData) {
@@ -61,30 +60,29 @@ export const InboxPage = () => {
   if (!user) return null;
 
   const getStatusBadge = (letter: SentLetter) => {
+    if (letter.status === 'queued') {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+          <Clock className="w-3 h-3" />
+          配達待ち
+        </span>
+      );
+    }
     if (letter.status === 'replied') {
       return (
-        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs shadow-sm" style={{ backgroundColor: '#8fcccc', color: 'white' }}>
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
           <Reply className="w-3 h-3" />
-          返信済み
+          返信あり
         </span>
       );
     }
     if (letter.status === 'delivered') {
-      if (!letter.read_at) {
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs shadow-sm" style={{ backgroundColor: '#88aaff', color: 'white' }}>
-            <Mail className="w-3 h-3" />
-            未読
-          </span>
-        );
-      } else {
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs shadow-sm" style={{ backgroundColor: '#8fcccc', color: 'white' }}>
-            <Check className="w-3 h-3" />
-            受け取り済み
-          </span>
-        );
-      }
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs shadow-sm" style={{ backgroundColor: '#8fcccc', color: 'white' }}>
+          <Check className="w-3 h-3" />
+          配達済み
+        </span>
+      );
     }
     return null;
   };
@@ -92,9 +90,9 @@ export const InboxPage = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="mb-1">受信したソングレター</h1>
+        <h1 className="mb-1">送信したソングレター</h1>
         <p className="text-sm text-gray-600">
-          あなたがこれまでに受け取ったソングレターの一覧です。
+          あなたがこれまでに送ったソングレターの一覧です。
         </p>
       </div>
 
@@ -104,7 +102,7 @@ export const InboxPage = () => {
         <div className="text-center py-12">
           <SendIcon className="w-16 h-16 mx-auto mb-4 text-gray-300" />
           <p className="text-sm text-gray-500">
-            まだソングレターを受け取っていません。
+            まだソングレターを送っていません。
           </p>
         </div>
       ) : (
@@ -158,9 +156,6 @@ export const InboxPage = () => {
                         month: 'short',
                         day: 'numeric',
                       })}
-                    </span>
-                    <span className="truncate max-w-[120px]">
-                      from {letter.is_anonymous ? '匿名' : letter.sender_name}
                     </span>
                   </div>
 

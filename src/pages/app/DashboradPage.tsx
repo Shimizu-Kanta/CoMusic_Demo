@@ -1,8 +1,8 @@
-// src/pages/app/DashboardPage.tsx
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabaseClient';
 import { Link } from 'react-router-dom';
+import { PenSquare, Mail, TrendingUp, Inbox } from 'lucide-react';
 
 type Profile = {
   id: string;
@@ -14,61 +14,188 @@ export const DashboardPage = () => {
   const { user } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
 
+  const [maxDailyLetters, setMaxDailyLetters] = useState<number>(5);
+  const [maxInboxLetters, setMaxInboxLetters] = useState<number>(10);
+  const [sentToday, setSentToday] = useState<number>(0);
+  const [unreadInbox, setUnreadInbox] = useState<number>(0);
+  const [loadingCounts, setLoadingCounts] = useState(true);
+
   useEffect(() => {
     if (!user) return;
 
-    const fetchProfile = async () => {
-      const { data, error } = await supabase
+    const fetchAll = async () => {
+      setLoadingCounts(true);
+
+      // プロフィール
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .single<Profile>();
 
-      if (error) {
-        console.error(error);
+      if (profileError) {
+        console.error(profileError);
       } else {
-        setProfile(data);
+        setProfile(profileData);
       }
+
+      // 設定値（app_settings）
+      const { data: settings, error: settingsError } = await supabase
+        .from('app_settings')
+        .select('key, value_int');
+
+      if (settingsError) {
+        console.warn('app_settings 読み込みエラー:', settingsError);
+      } else if (settings) {
+        for (const row of settings) {
+          if (row.key === 'max_daily_letters' && row.value_int != null) {
+            setMaxDailyLetters(row.value_int);
+          }
+          if (row.key === 'max_inbox_letters' && row.value_int != null) {
+            setMaxInboxLetters(row.value_int);
+          }
+        }
+      }
+
+      // 今日送ったソングレター数
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+
+      const { count: sentCount, error: sentError } = await supabase
+        .from('song_letters')
+        .select('id', { count: 'exact', head: true })
+        .eq('sender_id', user.id)
+        .gte('created_at', today.toISOString())
+        .lt('created_at', tomorrow.toISOString());
+
+      if (sentError) {
+        console.error(sentError);
+      } else {
+        setSentToday(sentCount ?? 0);
+      }
+
+      // 自分宛ての「未読」レター数（上限判定と同じ条件）
+      const { count: inboxCount, error: inboxError } = await supabase
+        .from('song_letters')
+        .select('id', { count: 'exact', head: true })
+        .eq('receiver_id', user.id)
+        .in('status', ['delivered', 'replied'])
+        .is('archived_at', null)
+        .is('read_at', null);
+
+      if (inboxError) {
+        console.error(inboxError);
+      } else {
+        setUnreadInbox(inboxCount ?? 0);
+      }
+
+      setLoadingCounts(false);
     };
 
-    fetchProfile();
+    fetchAll();
   }, [user]);
 
+  if (!user) return null;
+
+  const remainingLetters = Math.max(maxDailyLetters - sentToday, 0);
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold mb-1">
-          こんにちは、{profile?.username ?? 'ユーザー'} さん
+    <div className="space-y-8">
+      {/* Welcome Section */}
+      <div className="text-center py-8">
+        <h1 className="text-3xl mb-2">
+          こんにちは、<span style={{ color: '#8fcccc' }}>{profile?.username ?? 'ユーザー'}</span> さん
         </h1>
-        <p className="text-sm text-slate-400">
-          今日も誰かにソングレターを届けてみませんか？
+        <p className="text-sm text-gray-600">
+          今日も誰かにソングレターを届けてみませんか?
         </p>
       </div>
 
-      {/* TODO: 実際のカウント系ロジックは後で実装 */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <p className="text-xs text-slate-400 mb-1">今日送れるソングレター</p>
-          <p className="text-2xl font-semibold">5 通</p>
+      {/* Stats Grid */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* 今日送れるソングレター */}
+        <div className="group rounded-xl border border-gray-200 bg-white p-6 hover:border-[#8fcccc] hover:shadow-md transition-all">
+          <div className="flex items-start justify-between mb-4">
+            <div className="p-3 rounded-lg bg-[#8fcccc]/10">
+              <TrendingUp className="w-6 h-6" style={{ color: '#8fcccc' }} />
+            </div>
+            <p className="text-xs text-gray-500">本日</p>
+          </div>
+          <p className="text-xs text-gray-600 mb-1">今日送れるソングレター</p>
+          {loadingCounts ? (
+            <p className="text-sm text-gray-400">計算中…</p>
+          ) : (
+            <>
+              <p className="text-3xl mb-2" style={{ color: '#8fcccc' }}>
+                {remainingLetters} <span className="text-base text-gray-500">通</span>
+              </p>
+              <p className="text-xs text-gray-500">
+                本日 {sentToday} / {maxDailyLetters} 通 送信済み
+              </p>
+            </>
+          )}
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <p className="text-xs text-slate-400 mb-1">受信ボックス</p>
-          <p className="text-2xl font-semibold">0 通</p>
+
+        {/* 受信ボックス（未読） */}
+        <div className="group rounded-xl border border-gray-200 bg-white p-6 hover:border-[#8fcccc] hover:shadow-md transition-all">
+          <div className="flex items-start justify-between mb-4">
+            <div className="p-3 rounded-lg bg-[#8fcccc]/10">
+              <Inbox className="w-6 h-6" style={{ color: '#8fcccc' }} />
+            </div>
+            {unreadInbox > 0 && (
+              <span className="px-2 py-1 rounded-full text-xs" style={{ backgroundColor: '#8fcccc', color: 'white' }}>
+                {unreadInbox}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-600 mb-1">受信ボックス（未読）</p>
+          {loadingCounts ? (
+            <p className="text-sm text-gray-400">計算中…</p>
+          ) : (
+            <>
+              <p className="text-3xl mb-2" style={{ color: '#8fcccc' }}>
+                {unreadInbox} <span className="text-base text-gray-500">通</span>
+              </p>
+              <p className="text-xs text-gray-500">
+                受信枠: {unreadInbox} / {maxInboxLetters}
+              </p>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="flex gap-3">
+      {/* Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-2">
         <Link
           to="/letters/new"
-          className="rounded-md bg-sky-500 px-4 py-2 text-sm font-medium hover:bg-sky-400"
+          className="group flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-6 hover:border-[#8fcccc] hover:shadow-md transition-all"
         >
-          ソングレターを書く
+          <div className="p-4 rounded-xl group-hover:scale-110 transition-transform" style={{ backgroundColor: '#8fcccc' }}>
+            <PenSquare className="w-6 h-6 text-white" />
+          </div>
+          <div className="flex-1">
+            <h3 className="mb-1">ソングレターを書く</h3>
+            <p className="text-xs text-gray-600">
+              音楽と一緒に気持ちを届けよう
+            </p>
+          </div>
         </Link>
+
         <Link
           to="/letters/inbox"
-          className="rounded-md border border-slate-700 px-4 py-2 text-sm hover:bg-slate-900"
+          className="group flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-6 hover:border-[#8fcccc] hover:shadow-md transition-all"
         >
-          受信ボックスを開く
+          <div className="p-4 rounded-xl bg-gray-100 group-hover:bg-[#8fcccc]/10 group-hover:scale-110 transition-all">
+            <Mail className="w-6 h-6" style={{ color: '#8fcccc' }} />
+          </div>
+          <div className="flex-1">
+            <h3 className="mb-1">受信ボックスを開く</h3>
+            <p className="text-xs text-gray-600">
+              届いたソングレターを確認
+            </p>
+          </div>
         </Link>
       </div>
     </div>
