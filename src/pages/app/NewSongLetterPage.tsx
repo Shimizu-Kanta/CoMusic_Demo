@@ -276,71 +276,6 @@ export const NewSongLetterPage = () => {
     }
   };
 
-  const assignRandomReceiver = async (
-    letterId: string,
-    maxInbox: number
-  ): Promise<boolean> => {
-    if (!user) return false;
-
-    const { data: candidates, error: candidatesError } = await supabase
-      .from('profiles')
-      .select('id')
-      .neq('id', user.id);
-
-    if (candidatesError || !candidates || candidates.length === 0) {
-      console.warn('候補ユーザー取得エラーまたは対象なし:', candidatesError);
-      return false;
-    }
-
-    const receiverStats: { id: string; unreadCount: number }[] = [];
-
-    for (const c of candidates) {
-      const { count, error: countError } = await supabase
-        .from('song_letters')
-        .select('id', { count: 'exact', head: true })
-        .eq('receiver_id', c.id)
-        .in('status', ['delivered', 'replied'])
-        .is('archived_at', null)
-        .is('read_at', null);
-
-      if (countError) {
-        console.warn(`ユーザー ${c.id} の未読数取得エラー:`, countError);
-        continue;
-      }
-
-      if ((count ?? 0) < maxInbox) {
-        receiverStats.push({ id: c.id, unreadCount: count ?? 0 });
-      }
-    }
-
-    if (receiverStats.length === 0) {
-      console.log('未読上限を超えていないユーザーが見つからず、queued のままにします。');
-      return false;
-    }
-
-    // 未読数が少ない順にソート
-    receiverStats.sort((a, b) => a.unreadCount - b.unreadCount);
-
-    const receiverId = receiverStats[0].id;
-
-    const { error: updateError } = await supabase
-      .from('song_letters')
-      .update({
-        receiver_id: receiverId,
-        status: 'delivered',
-        delivered_at: new Date().toISOString(),
-      })
-      .eq('id', letterId);
-
-    if (updateError) {
-      console.warn('配達失敗:', updateError);
-      return false;
-    }
-
-    console.log(`未読数の少ないユーザー(${receiverId})に配達成功`);
-    return true;
-  };
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -351,18 +286,14 @@ export const NewSongLetterPage = () => {
     }
 
     if (limitExceeded) {
-      setError(
-        `本日の送信上限数(${maxDailyLetters}通)に達しました。また明日送りましょう！`
-      );
+      setError(`本日の送信上限数(${maxDailyLetters}通)に達しました。また明日送りましょう！`);
       return;
     }
 
     const displayName = isAnonymous ? '匿名' : profileName;
 
     if (!displayName) {
-      setError(
-        '送り主のユーザ名が取得できていません。ページを再読み込みしてからお試しください。'
-      );
+      setError('送り主のユーザ名が取得できていません。ページを再読み込みしてからお試しください。');
       return;
     }
 
@@ -374,281 +305,137 @@ export const NewSongLetterPage = () => {
     setLoading(true);
 
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      const { count: sentCount, error: sentcountError } = await supabase
-        .from('song_letters')
-        .select('id', { count: 'exact', head: true })
-        .eq('sender_id', user.id)
-        .gte('created_at', today.toISOString())
-        .lt('created_at', tomorrow.toISOString());
-
-      if (sentcountError) {
-        console.error(sentcountError);
-        throw new Error('送信回数の確認に失敗しました。');
-      }
-
-      if ((sentCount ?? 0) >= maxDailyLetters) {
-        throw new Error(
-          `本日の送信上限数(${maxDailyLetters}通)に達しました。また明日送りましょう！`
-        );
-      }
-
-      const { count: inboxCount, error: inboxError } = await supabase
-        .from('song_letters')
-        .select('id', { count: 'exact', head: true })
-        .eq('receiver_id', user.id)
-        .in('status', ['delivered', 'replied'])
-        .is('archived_at', null)
-        .is('read_at', null);
-
-      if (inboxError) {
-        console.error(inboxError);
-        throw new Error('受信ボックスの確認に失敗しました。');
-      }
-
-      if ((inboxCount ?? 0) >= maxInboxLetters) {
-        throw new Error(
-          `受信ボックスの上限数(${maxInboxLetters}通)に達しているため、送信できません。`
-        );
-      }
-
       let songId: string | null = null;
 
-      if (provider === 'spotify') {
-        if (!selectedTrack) {
-          setLoading(false);
-          setError('Spotifyの検索結果から曲を1つ選択してください。');
-          return;
-        }
-
-        const { data: existingSongs, error: selectSongError } = await supabase
+      if (selectedTrack) {
+        // 楽曲が存在するか確認（Spotify）
+        const { data: existingSong } = await supabase
           .from('songs')
           .select('id')
           .eq('provider', 'spotify')
           .eq('provider_track_id', selectedTrack.id)
-          .limit(1);
+          .single();
 
-        if (selectSongError) {
-          console.error(selectSongError);
-          throw new Error('楽曲情報の取得に失敗しました。');
-        }
-
-        if (existingSongs && existingSongs.length > 0) {
-          songId = existingSongs[0].id;
+        if (existingSong) {
+          songId = existingSong.id;
         } else {
-          const { data: insertedSong, error: insertSongError } = await supabase
+          const { data: newSong, error: insertError } = await supabase
             .from('songs')
             .insert({
+              title: selectedTrack.name,
               provider: 'spotify',
               provider_track_id: selectedTrack.id,
-              title: selectedTrack.name,
               url: selectedTrack.url,
               thumbnail_url: selectedTrack.imageUrl,
               duration_ms: selectedTrack.durationMs,
             })
-            .select('id')
+            .select()
             .single();
 
-          if (insertSongError || !insertedSong) {
-            console.error(insertSongError);
-            throw new Error('楽曲情報の保存に失敗しました。');
+          if (insertError || !newSong) {
+            throw new Error('楽曲情報の登録に失敗しました。');
           }
 
-          songId = insertedSong.id;
-        }
+          songId = newSong.id;
 
-        const artistIds: string[] = [];
+          // アーティスト登録
+          for (const artist of selectedTrack.artists) {
+            const { data: existingArtist } = await supabase
+              .from('artists')
+              .select('id')
+              .eq('provider', 'spotify')
+              .eq('provider_artist_id', artist.id)
+              .single();
 
-        for (const artist of selectedTrack.artists) {
-          if (!artist.name) continue;
+            let artistId = existingArtist?.id;
 
-          let artistId: string | null = null;
-
-          if (artist.id) {
-            const { data: existingArtists, error: selectArtistError } =
-              await supabase
-                .from('artists')
-                .select('id')
-                .eq('provider', 'spotify')
-                .eq('provider_artist_id', artist.id)
-                .limit(1);
-
-            if (selectArtistError) {
-              console.error(selectArtistError);
-              throw new Error('アーティスト情報の取得に失敗しました。');
-            }
-
-            if (existingArtists && existingArtists.length > 0) {
-              artistId = existingArtists[0].id;
-            }
-          }
-
-          if (!artistId) {
-            const { data: insertedArtist, error: insertArtistError } =
-              await supabase
+            if (!artistId) {
+              const { data: newArtist } = await supabase
                 .from('artists')
                 .insert({
                   name: artist.name,
                   provider: 'spotify',
                   provider_artist_id: artist.id,
                 })
-                .select('id')
+                .select()
                 .single();
 
-            if (insertArtistError || !insertedArtist) {
-              console.error(insertArtistError);
-              throw new Error('アーティスト情報の保存に失敗しました。');
-            }
-
-            artistId = insertedArtist.id;
-          }
-
-          artistIds.push(artistId);
-        }
-
-        if (artistIds.length > 0 && songId) {
-          const rows = artistIds.map((artistId) => ({
-            song_id: songId!,
-            artist_id: artistId,
-          }));
-          const { error: saError } = await supabase
-            .from('songs_artists')
-            .insert(rows);
-
-          if (saError) {
-            console.warn('songs_artists 挿入エラー:', saError);
-          }
-        }
-      } else {
-        // YouTube
-        if (!ytInput.trim()) {
-          setLoading(false);
-          setError('YouTube の URL またはIDを入力してください。');
-          return;
-        }
-
-        const videoId = ytMeta?.id ?? extractYouTubeId(ytInput);
-        if (!videoId) {
-          setLoading(false);
-          setError('YouTube の URL / ID の形式を確認してください。');
-          return;
-        }
-
-        const titleToUse =
-          ytTitle.trim() || ytMeta?.title || 'YouTube video';
-
-        const urlToUse = ytMeta?.url ?? ytInput.trim();
-        const thumbnailToUse = ytMeta?.imageUrl || null;
-        const durationMs = ytMeta?.durationSec != null ? ytMeta.durationSec * 1000 : null;
-
-        const { data: existingSongs, error: selectSongError } = await supabase
-          .from('songs')
-          .select('id')
-          .eq('provider', 'youtube')
-          .eq('provider_track_id', videoId)
-          .limit(1);
-        
-        if (selectSongError) {
-          console.error(selectSongError);
-          throw new Error('楽曲情報の取得に失敗しました。');
-        }
-
-        if (existingSongs && existingSongs.length > 0) {
-          songId = existingSongs[0].id;
-        } else {
-          const { data: insertedSong, error: insertSongError } = await supabase
-            .from('songs')
-            .insert({
-              provider: 'youtube',
-              provider_track_id: videoId,
-              title: titleToUse,
-              url: urlToUse,
-              thumbnail_url: thumbnailToUse,
-              duration_ms: durationMs,
-            })
-            .select('id')
-            .single();
-
-          if (insertSongError || !insertedSong) {
-            console.error(insertSongError);
-            throw new Error('楽曲情報の保存に失敗しました。');
-          }
-
-          songId = insertedSong.id;
-        }
-
-        // YouTube の場合はチャンネルを artists テーブルに登録して songs_artists に紐づける
-        try {
-          const channelProviderId =
-            (ytMeta && (ytMeta.channel_url ?? ytMeta.channelUrl)) || null;
-
-          if (channelProviderId && songId) {
-            let artistId: string | null = null;
-
-            const { data: existingArtists, error: selectArtistError } =
-              await supabase
-                .from('artists')
-                .select('id')
-                .eq('provider', 'youtube')
-                .eq('provider_artist_id', channelProviderId)
-                .limit(1);
-
-            if (selectArtistError) {
-              console.error(selectArtistError);
-              throw new Error('アーティスト情報の取得に失敗しました。');
-            }
-
-            if (existingArtists && existingArtists.length > 0) {
-              artistId = existingArtists[0].id;
-            } else {
-              const { data: insertedArtist, error: insertArtistError } =
-                await supabase
-                  .from('artists')
-                  .insert({
-                    name: ytMeta?.channelTitle ?? 'YouTube Channel',
-                    provider: 'youtube',
-                    provider_artist_id: channelProviderId,
-                  })
-                  .select('id')
-                  .single();
-
-              if (insertArtistError || !insertedArtist) {
-                console.error(insertArtistError);
-                throw new Error('アーティスト情報の保存に失敗しました。');
-              }
-
-              artistId = insertedArtist.id;
+              artistId = newArtist?.id;
             }
 
             if (artistId) {
-              const rows = [
-                {
-                  song_id: songId,
-                  artist_id: artistId,
-                },
-              ];
-
-              const { error: saError } = await supabase
-                .from('songs_artists')
-                .insert(rows);
-
-              if (saError) {
-                console.warn('songs_artists 挿入エラー:', saError);
-              }
+              await supabase.from('songs_artists').insert({
+                song_id: newSong.id,
+                artist_id: artistId,
+              });
             }
           }
-        } catch (e) {
-          // artist 周りで失敗しても致命的ではないので warn のみ
-          console.warn('YouTube channel -> artist 処理でエラー:', e);
         }
-      }
+      } else if (ytMeta) {
+        // 楽曲が存在するか確認（YouTube）
+        const { data: existingSong } = await supabase
+          .from('songs')
+          .select('id')
+          .eq('provider', 'youtube')
+          .eq('provider_track_id', ytMeta.id)
+          .single();
 
-      if (!songId) {
-        throw new Error('楽曲情報の保存に失敗しました。');
+        if (existingSong) {
+          songId = existingSong.id;
+        } else {
+          const { data: newSong, error: insertError } = await supabase
+            .from('songs')
+            .insert({
+              title: ytMeta.title,
+              provider: 'youtube',
+              provider_track_id: ytMeta.id,
+              url: ytMeta.url,
+              thumbnail_url: ytMeta.imageUrl,
+              duration_ms: ytMeta.durationSec ? ytMeta.durationSec * 1000 : null,
+            })
+            .select()
+            .single();
+
+          if (insertError || !newSong) {
+            throw new Error('YouTubeの動画登録に失敗しました。');
+          }
+
+          songId = newSong.id;
+
+          if (ytMeta.channelTitle) {
+            const channelProviderId = ytMeta.channel_url || ytMeta.channelUrl;
+
+            const { data: existingArtist } = await supabase
+              .from('artists')
+              .select('id')
+              .eq('provider', 'youtube')
+              .eq('provider_artist_id', channelProviderId)
+              .single();
+
+            let artistId = existingArtist?.id;
+
+            if (!artistId && channelProviderId) {
+              const { data: newArtist } = await supabase
+                .from('artists')
+                .insert({
+                  name: ytMeta.channelTitle,
+                  provider: 'youtube',
+                  provider_artist_id: channelProviderId,
+                })
+                .select()
+                .single();
+
+              artistId = newArtist?.id;
+            }
+
+            if (artistId) {
+              await supabase.from('songs_artists').insert({
+                song_id: newSong.id,
+                artist_id: artistId,
+              });
+            }
+          }
+        }
       }
 
       const { data: insertedLetter, error: insertLetterError } = await supabase
@@ -666,11 +453,21 @@ export const NewSongLetterPage = () => {
         .single();
 
       if (insertLetterError || !insertedLetter) {
-        console.error(insertLetterError);
         throw new Error('ソングレターの送信に失敗しました。');
       }
 
-      await assignRandomReceiver(insertedLetter.id, maxInboxLetters);
+      // 📡 Edge Function で受信者割当処理を呼び出し
+      const { error: edgeError } = await supabase.functions.invoke('assign-receiver-on-submit', {
+        body: {
+          letterId: insertedLetter.id,
+          excludeUserId: user.id,
+          maxInboxCount: maxInboxLetters,
+        },
+      });
+
+      if (edgeError) {
+        console.warn('Edge Function 呼び出し時の警告:', edgeError);
+      }
 
       navigate('/app', { replace: true });
     } catch (err: any) {
