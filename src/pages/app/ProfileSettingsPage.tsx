@@ -1,14 +1,19 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
-import { User, Save } from 'lucide-react';
+import { User, Save, Trash2 } from 'lucide-react';
 
 export const ProfileSettingsPage = () => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -51,6 +56,36 @@ export const ProfileSettingsPage = () => {
     }
 
     setSaving(false);
+  };
+
+    const handleDeleteAccount = async () => {
+    if (!user) return;
+
+    const confirmed = window.confirm("本当にアカウントを削除しますか？この操作は取り消せません。");
+    if (!confirmed) return;
+
+    setLoading(true);
+    setErrorMsg("");
+
+    try {
+      const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { user_id: user.id },
+      });
+
+      if (error) {
+        console.error("削除関数エラー:", error.message);
+        setErrorMsg("アカウント削除に失敗しました");
+        setLoading(false);
+        return;
+      }
+
+      await supabase.auth.signOut();
+      navigate("/login");
+    } catch (e) {
+      console.error("Edge Function呼び出しエラー:", e);
+      setErrorMsg("アカウント削除処理に失敗しました");
+      setLoading(false);
+    }
   };
 
   if (!user) return null;
@@ -133,6 +168,67 @@ export const ProfileSettingsPage = () => {
             {saving ? '保存中...' : '保存する'}
           </button>
         </form>
+      )}
+
+      {/* アカウント削除セクション */}
+      <div className="rounded-xl border border-red-200 bg-red-50 p-6 space-y-4">
+        <h3 className="flex items-center gap-2 text-red-700">
+          <Trash2 className="w-5 h-5" />
+          アカウント削除
+        </h3>
+
+        <div className="space-y-3">
+          <p className="text-sm text-red-600">
+            アカウントを削除すると、すべてのデータが完全に削除され、復元できません。
+            送信した手紙や受信した手紙もすべて削除されます。
+          </p>
+
+          <button
+            type="button"
+            onClick={() => setShowDeleteConfirm(true)}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm bg-red-600 text-white hover:bg-red-700 transition-colors"
+            style={{ backgroundColor: '#ff5555' }}
+          >
+            <Trash2 className="w-4 h-4" />
+            アカウントを削除する
+          </button>
+        </div>
+      </div>
+
+      {/* 削除確認ダイアログ */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full space-y-4">
+            <h3 className="text-lg font-semibold text-red-700">
+              アカウントを削除しますか？
+            </h3>
+
+            <p className="text-sm text-gray-600">
+              この操作は取り消すことができません。すべてのデータが完全に削除されます。
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 rounded-lg px-4 py-2 text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                disabled={deleting}
+              >
+                キャンセル
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleting}
+                className="flex-1 rounded-lg px-4 py-2 text-sm bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                style={{ backgroundColor: '#ff5555' }}
+              >
+                {deleting ? '削除中...' : '削除する'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
