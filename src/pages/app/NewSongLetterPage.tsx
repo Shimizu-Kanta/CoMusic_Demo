@@ -459,9 +459,8 @@ export const NewSongLetterPage = () => {
       // 📡 Edge Function で受信者割当処理を呼び出し
       const { error: edgeError } = await supabase.functions.invoke('assign-receiver-on-submit', {
         body: {
-          letterId: insertedLetter.id,
-          excludeUserId: user.id,
-          maxInboxCount: maxInboxLetters,
+          letter_id: insertedLetter.id,
+          sender_id: user.id,
         },
       });
 
