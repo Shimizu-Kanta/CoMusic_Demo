@@ -302,6 +302,11 @@ export const NewSongLetterPage = () => {
       return;
     }
 
+    if (message.length > 300) {
+      setError('メッセージは300文字以内で入力してください。');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -825,7 +830,11 @@ export const NewSongLetterPage = () => {
             placeholder="この曲に込めた気持ちや、伝えたいことを書いてみましょう。"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
+            maxLength={300}
           />
+          <p className="text-xs text-gray-500">
+            {message.length}/300文字
+          </p>
         </div>
 
         {error && (
