@@ -161,6 +161,13 @@ export const LetterDetailPage = () => {
       return;
     }
 
+    if (replyText.length > 300) {
+      setError('返信は300文字以内でお願いします。');
+      return;
+    }
+
+    
+
     setSendingReply(true);
     setError(null);
 
@@ -328,7 +335,11 @@ export const LetterDetailPage = () => {
               placeholder="このレターへの感想やお礼を書いてみましょう（任意）"
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
+              maxLength={300}
             />
+            <p className="text-xs text-gray-500">
+              {replyText.length}/300
+            </p>
             <label className="inline-flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
