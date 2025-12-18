@@ -22,6 +22,7 @@ export const DashboardPage = () => {
   const [unreadInbox, setUnreadInbox] = useState<number>(0);
   const [loadingCounts, setLoadingCounts] = useState(true);
   const [isOpenTutorial, setIsOpenTutorial] = useState(false);
+  const [hasSeenTutorial, setHasSeenTutorial] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -34,12 +35,19 @@ export const DashboardPage = () => {
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single<Profile>();
+        .single<Profile & { has_seen_tutorial: boolean }>();
 
       if (profileError) {
         console.error(profileError);
       } else {
         setProfile(profileData);
+        // has_seen_tutorial フラグをチェック
+        if (profileData && profileData.has_seen_tutorial === false) {
+          setIsOpenTutorial(true);
+          setHasSeenTutorial(false);
+        } else {
+          setHasSeenTutorial(profileData?.has_seen_tutorial ?? true);
+        }
       }
 
       // 設定値（app_settings）
@@ -100,6 +108,29 @@ export const DashboardPage = () => {
     fetchAll();
   }, [user]);
 
+  // モーダルを閉じた時に has_seen_tutorial を TRUE に更新
+  const handleCloseTutorialModal = async (open: boolean) => {
+    setIsOpenTutorial(open);
+
+    // モーダルが閉じられた場合（open === false）
+    if (!open && hasSeenTutorial === false && user) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ has_seen_tutorial: true })
+          .eq('id', user.id);
+
+        if (!error) {
+          setHasSeenTutorial(true);
+        } else {
+          console.error('has_seen_tutorial の更新に失敗:', error);
+        }
+      } catch (err) {
+        console.error('更新中にエラーが発生:', err);
+      }
+    }
+  };
+
   if (!user) return null;
 
   const remainingLetters = Math.max(maxDailyLetters - sentToday, 0);
@@ -108,7 +139,7 @@ export const DashboardPage = () => {
     <>
       <Modal 
         isOpenModal={isOpenTutorial} 
-        setIsOpenModal={setIsOpenTutorial} 
+        setIsOpenModal={handleCloseTutorialModal} 
       />
       
       <div className="space-y-8">
